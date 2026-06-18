@@ -2,12 +2,13 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="description" content="เกมตีบอสตอบคำถามวิชาสังคมออนไลน์">
   <title>⚔️ Social Quest Online</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <button id="muteBtn" class="mute-btn" title="เปิด/ปิดเสียง" onclick="toggleGlobalMute()">🔊</button>
   <div id="loginScreen" class="screen active">
     <div class="login-bg"></div>
     <div class="login-container">
@@ -25,10 +26,20 @@
           
           <div style="display: flex; gap: 10px; margin-bottom: 15px;">
             <div style="flex: 1;">
-              <label for="maxPlayers" style="font-size:12px; color:#5d4037; font-weight:bold; text-transform:uppercase;">จำนวนคนที่ต้องการ</label>
-              <input type="number" id="maxPlayers" min="1" max="10" value="2" style="width: 100%; padding: 10px; border: 2px solid #8b4513; border-radius:4px; font-family: var(--font-th); text-align: center; font-weight: bold; font-size: 16px; background: #fffdf5;">
+              <label for="maxPlayers" style="font-size:12px; color:#5d4037; font-weight:bold; text-transform:uppercase;">จำนวนคน</label>
+              <input type="number" id="maxPlayers" min="1" max="50" value="2" style="width: 100%; padding: 10px; border: 2px solid #8b4513; border-radius:4px; font-family: var(--font-th); text-align: center; font-weight: bold; font-size: 16px; background: #fffdf5;">
             </div>
-            <button id="createRoomBtn" class="btn-primary" style="flex: 2; font-size: 16px; margin-top: 20px;">🏰 สร้างห้อง</button>
+            <div style="flex: 1;">
+              <label for="gameDuration" style="font-size:12px; color:#5d4037; font-weight:bold; text-transform:uppercase;">เวลา (นาที)</label>
+              <select id="gameDuration" style="width: 100%; padding: 10px; border: 2px solid #8b4513; border-radius:4px; font-family: var(--font-th); text-align: center; font-weight: bold; font-size: 16px; background: #fffdf5;">
+                <option value="60">1 นาที</option>
+                <option value="120">2 นาที</option>
+                <option value="180" selected>3 นาที</option>
+                <option value="300">5 นาที</option>
+                <option value="600">10 นาที</option>
+              </select>
+            </div>
+            <button id="createRoomBtn" class="btn-primary" style="flex: 1; font-size: 16px; margin-top: 20px; padding: 10px 5px;">🏰 สร้างห้อง</button>
           </div>
           
           <div style="display: flex; gap: 10px;">
@@ -65,7 +76,10 @@
         </div>
         
         <p id="lobbyStatus" style="font-weight:bold; color:var(--success); font-size: 20px; animation: pulse 1s infinite alternate;"></p>
-        <button id="leaveLobbyBtn" class="btn-primary" style="background: linear-gradient(to bottom, #d32f2f, #b71c1c); margin-top: 20px;">🚪 ออกจากห้อง</button>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          <button id="readyBtn" class="btn-primary" style="flex: 1;">✅ เตรียมพร้อม</button>
+          <button id="leaveLobbyBtn" class="btn-primary" style="flex: 1; background: linear-gradient(to bottom, #d32f2f, #b71c1c);">🚪 ออกจากห้อง</button>
+        </div>
       </div>
     </div>
   </div>
@@ -74,6 +88,7 @@
     <div id="hud">
       <div id="hudLeft">
         <div class="hud-panel"><div class="hud-label">⏱️ เวลาที่เหลือ</div><div id="timerValue" class="hud-value">3:00</div><div class="timer-bar"><div id="timerFill" class="timer-fill"></div></div></div>
+        <div class="hud-panel"><div class="hud-label">❤️ พลังชีวิต</div><div id="hpValue" class="hud-value" style="color: #4ade80;">100</div><div class="timer-bar"><div id="hpFill" class="timer-fill" style="background: #4ade80;"></div></div></div>
         <div class="hud-panel"><div class="hud-label">⭐ แต้มสะสม</div><div id="scoreValue" class="hud-value">0</div></div>
       </div>
       <div id="hudCenter"><div id="announcements"></div></div>
@@ -120,9 +135,24 @@
         </div>
       </div>
     </div>
+
+    <div id="youDiedModal" class="modal hidden">
+      <div class="modal-overlay"></div>
+      <div class="modal-content gameover-modal medieval-panel" style="border: 4px solid #b71c1c;">
+        <div class="gameover-header">
+          <div class="trophy-icon">☠️</div>
+          <h2 style="color: #ef5350; text-shadow: 2px 2px 4px #000;">คุณตายแล้ว!</h2>
+        </div>
+        <p style="text-align: center; color: #ffcdd2; margin-bottom: 20px; font-weight: bold; font-size: 1.2rem;">ร่างของคุณแหลกสลาย... รอให้การต่อสู้จบลง</p>
+        <div style="display: flex; gap: 10px;">
+          <button id="spectateBtn" class="btn-primary" style="flex: 1;"><span>👀 ดูคนอื่นเล่น</span></button>
+          <button id="leaveDeathBtn" class="btn-primary" style="flex: 1; background: linear-gradient(to bottom, #d32f2f, #b71c1c);"><span>🚪 ออกจากห้อง</span></button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div id="mobileControls" class="hidden">
+  <div id="mobileControls">
     <div class="dpad">
       <button class="dpad-btn dpad-up" data-dir="up">▲</button>
       <button class="dpad-btn dpad-left" data-dir="left">◄</button>
@@ -133,7 +163,17 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="audio.js"></script>
   <script src="sprites.js"></script>
   <script src="game.js"></script>
+  <script>
+    function toggleGlobalMute() {
+      const btn = document.getElementById('muteBtn');
+      if (typeof AudioManager !== 'undefined') {
+        const isMuted = AudioManager.toggleMute();
+        btn.textContent = isMuted ? '🔇' : '🔊';
+      }
+    }
+  </script>
 </body>
 </html>

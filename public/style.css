@@ -248,7 +248,28 @@ body { font-family: var(--font-th); background: var(--bg-dark); color: var(--tex
 }
 .admin-link:hover { background: var(--accent); border-color: var(--accent); }
 
+/* Effects */
+@keyframes screenShake {
+  0% { transform: translate(1px, 1px) rotate(0deg); }
+  10% { transform: translate(-1px, -2px) rotate(-1deg); }
+  20% { transform: translate(-3px, 0px) rotate(1deg); }
+  30% { transform: translate(3px, 2px) rotate(0deg); }
+  40% { transform: translate(1px, -1px) rotate(1deg); }
+  50% { transform: translate(-1px, 2px) rotate(-1deg); }
+  60% { transform: translate(-3px, 1px) rotate(0deg); }
+  70% { transform: translate(3px, 1px) rotate(-1deg); }
+  80% { transform: translate(-1px, -1px) rotate(1deg); }
+  90% { transform: translate(1px, 2px) rotate(0deg); }
+  100% { transform: translate(1px, -2px) rotate(-1deg); }
+}
+
+.shake {
+  animation: screenShake 0.3s;
+  animation-iteration-count: 1;
+}
+
 /* Mobile Controls */
+#mobileControls { display: none; }
 .dpad { position: fixed; bottom: 40px; left: 20px; z-index: 50; display: grid; grid-template-columns: 60px 60px 60px; grid-template-rows: 60px 60px 60px; gap: 4px; }
 .dpad-btn { 
   background: rgba(62, 39, 35, 0.7); border: 2px solid #b8860b; border-radius: 12px; 
@@ -275,8 +296,74 @@ body { font-family: var(--font-th); background: var(--bg-dark); color: var(--tex
 @media (max-width: 768px) {
   .login-card { padding: 24px; }
   .logo-title { font-size: 32px; }
-  .hud-panel { padding: 8px 12px; min-width: 120px; }
-  .hud-value { font-size: 24px; }
+  
+  /* Vertical HUD Stacking */
+  #hud { flex-direction: row; flex-wrap: wrap; justify-content: space-between; padding: 5px; gap: 4px; pointer-events: none; }
+  #hud > * { pointer-events: auto; }
+  #hudLeft { flex-direction: column; width: auto; gap: 4px; }
+  #hudCenter { width: 100%; order: 3; margin-top: 5px; align-items: center; }
+  #hudRight { flex-direction: column; width: auto; gap: 4px; align-items: flex-end; }
+  #leaderboardList { display: flex; max-height: 80px; overflow-y: auto; flex-direction: column; gap: 2px; }
+  
+  .hud-panel { padding: 4px 8px; min-width: auto; margin-bottom: 0; }
+  .hud-label { font-size: 10px; }
+  .hud-value { font-size: 16px; }
+  .lb-entry { font-size: 11px; padding: 2px 0; }
+  
   #controlsHint { display: none; }
-  #minimap-container { width: 100px; height: 100px; border-width: 2px; }
+  
+  /* Minimap placed at bottom center */
+  #minimap-container { 
+    display: block; 
+    width: 80px; height: 80px; 
+    bottom: 15px; right: 50%; 
+    transform: translateX(50%); 
+    border-width: 2px;
+  }
+  
+  /* Modals */
+  .question-modal, .gameover-modal { padding: 15px; width: 95%; max-height: 90vh; overflow-y: auto; }
+  .question-header h2 { font-size: 18px; }
+  .question-text { font-size: 14px; margin-bottom: 10px; }
+  .choice-btn { padding: 6px 10px; font-size: 13px; }
+  .choice-label { width: 20px; height: 20px; font-size: 10px; }
+  
+  /* Mute Button (moved above attack button) */
+  .mute-btn { top: auto; bottom: 120px; right: 15px; width: 36px; height: 36px; font-size: 16px; }
+  
+  /* Mobile controls */
+  #mobileControls { display: block; }
+  .dpad { transform: scale(0.75); transform-origin: bottom left; bottom: 15px; left: 10px; }
+  .mobile-attack-btn { transform: scale(0.75); transform-origin: bottom right; bottom: 15px; right: 10px; }
+}
+
+@media (max-width: 480px) {
+  .logo-title { font-size: 24px; }
+  .input-group input { padding: 8px 12px; font-size: 16px; }
+  .btn-primary { padding: 10px; font-size: 16px; }
+  .login-card { padding: 16px; }
+}
+
+/* Global Mute Button */
+.mute-btn {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  background: var(--bg-wood);
+  color: #fff;
+  border: var(--border-gold);
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+  transition: transform 0.2s;
+}
+.mute-btn:hover {
+  transform: scale(1.1);
 }

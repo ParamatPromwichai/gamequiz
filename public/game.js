@@ -8,6 +8,7 @@ const screens = {
 };
 const loginInput = document.getElementById('playerName');
 const createRoomBtn = document.getElementById('createRoomBtn');
+const readyBtn = document.getElementById('readyBtn');
 const maxPlayersInput = document.getElementById('maxPlayers');
 const joinRoomBtn = document.getElementById('joinRoomBtn');
 const roomCodeInput = document.getElementById('roomCodeInput');
@@ -41,6 +42,12 @@ const goModal = document.getElementById('gameOverModal');
 const rankingsList = document.getElementById('rankingsList');
 const playAgainBtn = document.getElementById('playAgainBtn');
 
+const hpValueEl = document.getElementById('hpValue');
+const hpFillEl = document.getElementById('hpFill');
+const youDiedModal = document.getElementById('youDiedModal');
+const leaveDeathBtn = document.getElementById('leaveDeathBtn');
+const spectateBtn = document.getElementById('spectateBtn');
+
 // Mobile Controls
 const mobileControls = document.getElementById('mobileControls');
 
@@ -57,11 +64,13 @@ let gameState = {
   camera: { x: 0, y: 0, width: 0, height: 0 }
 };
 
+let lastMoveEmitTime = 0;
+
 // ─── Input Handling ───
 const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
 let isSpacePressed = false;
 let moveDir = { x: 0, y: 0 };
-const PLAYER_SPEED = 4;
+const PLAYER_SPEED = 180; // pixels per second
 
 window.addEventListener('keydown', (e) => {
   if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
@@ -81,9 +90,6 @@ canvas.addEventListener('click', () => {
 });
 
 // Mobile Controls setup
-if (mobileControls) {
-  mobileControls.classList.remove('hidden');
-}
 const hint = document.getElementById('controlsHint');
 if(hint) hint.classList.add('hidden');
 
@@ -155,9 +161,10 @@ initLoginParticles();
 // ─── Socket Events ───
 
 createRoomBtn.addEventListener('click', () => {
-  const name = loginInput.value.trim() || 'ผู้กล้าไร้นาม';
+  const name = loginInput.value.trim() || 'ผู้กล้า';
   const maxPlayers = maxPlayersInput.value;
-  socket.emit('createRoom', { name, maxPlayers });
+  const duration = parseInt(document.getElementById('gameDuration').value) || 180;
+  socket.emit('createRoom', { name, maxPlayers, duration });
 });
 
 joinRoomBtn.addEventListener('click', () => {
@@ -228,7 +235,12 @@ function updateLobbyUI(current, max, players) {
     el.style.display = 'flex';
     el.style.alignItems = 'center';
     el.style.gap = '10px';
-    el.innerHTML = `<div style="width:16px; height:16px; border-radius:50%; background:${p.color};"></div> ${p.name}`;
+    const readyMark = p.ready !== undefined ? (p.ready ? ' ✅ พร้อม' : ' ⏳ รอ') : '';
+    
+    el.innerHTML = `
+      <div style="width:16px; height:16px; border-radius:50%; background-color:${p.color}; border:2px solid #3e2723;"></div>
+      <div style="font-weight:bold; color:var(--text-dark);">${p.name} ${p.id === socket.id ? '(คุณ)' : ''}${readyMark}</div>
+    `;
     list.appendChild(el);
   });
 }
@@ -238,6 +250,7 @@ socket.on('lobbyCountdown', (sec) => {
 });
 
 socket.on('gameStarted', (data) => {
+  if (typeof AudioManager !== 'undefined') AudioManager.playBGM('battle');
   screens.lobby.classList.remove('active');
   screens.game.classList.add('active');
   
@@ -247,8 +260,11 @@ socket.on('gameStarted', (data) => {
   gameState.players = data.players;
   gameState.active = true;
   scoreEl.textContent = '0';
+  hpValueEl.textContent = '100';
+  hpFillEl.style.width = '100%';
   updateLeaderboard();
   goModal.classList.add('hidden');
+  youDiedModal.classList.add('hidden');
   qModal.classList.add('hidden');
   
   requestAnimationFrame(gameLoop);
@@ -290,6 +306,10 @@ socket.on('monsterSpawned', (monster) => {
 });
 
 socket.on('lastBossSpawned', (boss) => {
+  if (typeof AudioManager !== 'undefined') {
+    AudioManager.playBGM('boss');
+    AudioManager.playSFX('boss_spawn');
+  }
   gameState.monsters[boss.id] = boss;
   createSpawnEffect(boss.x, boss.y, boss.color, true);
   // Shake screen effect
@@ -313,6 +333,7 @@ socket.on('playerAttack', (data) => {
 });
 
 socket.on('monsterDamaged', (data) => {
+  if (typeof AudioManager !== 'undefined') AudioManager.playSFX('hit');
   if (gameState.monsters[data.monsterId]) {
     gameState.monsters[data.monsterId].currentHp = data.currentHp;
     createDamageText(gameState.monsters[data.monsterId].x, gameState.monsters[data.monsterId].y, data.damage);
@@ -320,6 +341,7 @@ socket.on('monsterDamaged', (data) => {
 });
 
 socket.on('monsterDefeated', (data) => {
+  if (typeof AudioManager !== 'undefined') AudioManager.playSFX('kill');
   if (gameState.monsters[data.monsterId]) {
     const m = gameState.monsters[data.monsterId];
     createDeathEffect(m.x, m.y, m.color);
@@ -352,6 +374,33 @@ socket.on('leaderboardUpdate', (players) => {
   updateLeaderboard();
 });
 
+socket.on('hpUpdate', (data) => {
+  if (gameState.players[data.playerId]) {
+    gameState.players[data.playerId].hp = data.hp;
+    gameState.players[data.playerId].maxHp = data.maxHp;
+    gameState.players[data.playerId].isDead = data.isDead;
+    createDamageText(gameState.players[data.playerId].x, gameState.players[data.playerId].y, data.damage);
+  }
+  if (data.playerId === gameState.myId) {
+    hpValueEl.textContent = data.hp;
+    hpFillEl.style.width = Math.max(0, (data.hp / data.maxHp) * 100) + '%';
+    
+    // Screen shake
+    screens.game.classList.add('shake');
+    setTimeout(() => screens.game.classList.remove('shake'), 300);
+  }
+});
+
+socket.on('playerDied', (data) => {
+  if (gameState.players[data.playerId]) {
+    gameState.players[data.playerId].isDead = true;
+  }
+  if (data.playerId === gameState.myId) {
+    youDiedModal.classList.remove('hidden');
+    qModal.classList.add('hidden');
+  }
+});
+
 // ─── Question System ───
 let currentQuestionCallback = null;
 
@@ -369,7 +418,7 @@ socket.on('showQuestion', (data) => {
     qTitle.style.color = '';
   }
   
-  qMonsterInfo.textContent = `กำจัด ${data.monsterName} (รางวัล: ${data.isLastBoss ? data.xp * 3 : data.xp} คะแนน)`;
+  qMonsterInfo.textContent = `กำจัด ${data.monsterName} (รางวัล: ${data.xp} คะแนน)`;
   qText.textContent = data.question;
   
   qChoices.innerHTML = '';
@@ -394,9 +443,11 @@ function submitAnswer(index, btnElement) {
     qResult.className = `question-result ${result.correct ? 'correct-result' : 'wrong-result'}`;
     
     if (result.correct) {
+      if (typeof AudioManager !== 'undefined') AudioManager.playSFX('correct');
       btnElement.classList.add('correct');
       qResult.innerHTML = `<strong>✅ ถูกต้อง!</strong> รับไปเลย ${result.points} คะแนน<br><small>${result.explanation}</small>`;
     } else {
+      if (typeof AudioManager !== 'undefined') AudioManager.playSFX('wrong');
       btnElement.classList.add('wrong');
       btns[result.correctAnswer].classList.add('correct');
       qResult.innerHTML = `<strong>❌ ผิด!</strong> ไม่ได้รับคะแนน<br><small>${result.explanation}</small>`;
@@ -410,7 +461,12 @@ function submitAnswer(index, btnElement) {
 
 // ─── Game Over ───
 socket.on('gameEnded', (data) => {
+  if (typeof AudioManager !== 'undefined') {
+    AudioManager.playBGM('lobby');
+    AudioManager.playSFX('gameover');
+  }
   goModal.classList.remove('hidden');
+  youDiedModal.classList.add('hidden');
   qModal.classList.add('hidden');
   
   rankingsList.innerHTML = '';
@@ -428,15 +484,45 @@ socket.on('gameEnded', (data) => {
 });
 
 playAgainBtn.addEventListener('click', () => {
-  // socket.emit('startGame'); -> We don't restart rooms this way now. 
-  // For room-based play again, it's easier to reload and let them recreate/join.
-  window.location.reload();
+  goModal.classList.add('hidden');
+  youDiedModal.classList.add('hidden');
+  screens.game.classList.remove('active');
+  screens.lobby.classList.add('active');
+  document.getElementById('lobbyStatus').textContent = 'รอผู้กล้าท่านอื่นเตรียมพร้อม...';
+  readyBtn.disabled = false;
+  readyBtn.textContent = '✅ เตรียมพร้อม';
+});
+
+leaveLobbyBtn.addEventListener('click', () => {
+  socket.emit('leaveRoom');
+  screens.lobby.classList.remove('active');
+  screens.login.classList.add('active');
+});
+
+readyBtn.addEventListener('click', () => {
+  socket.emit('playerReady');
+  readyBtn.disabled = true;
+  readyBtn.textContent = '⏳ รอคนอื่น...';
+});
+
+leaveDeathBtn.addEventListener('click', () => {
+  socket.emit('leaveRoom');
+  youDiedModal.classList.add('hidden');
+  screens.game.classList.remove('active');
+  screens.login.classList.add('active');
+});
+
+spectateBtn.addEventListener('click', () => {
+  youDiedModal.classList.add('hidden');
+  // Player is already dead (gameState.isDead is true, so they can't move/attack)
+  // They just watch until the game finishes.
 });
 
 // ─── Game Logic ───
 function attemptAttack() {
+  if (typeof AudioManager !== 'undefined') AudioManager.playSFX('attack');
   const me = gameState.players[gameState.myId];
-  if (!me) return;
+  if (!me || me.isDead) return;
   
   // Find nearest monster
   let closest = null;
@@ -463,22 +549,44 @@ function updateLeaderboard() {
   const sorted = Object.values(gameState.players).sort((a, b) => b.score - a.score);
   leaderboardList.innerHTML = '';
   
-  sorted.slice(0, 5).forEach((p, i) => {
+  let myRankIndex = -1;
+  sorted.forEach((p, i) => {
+    if (p.id === gameState.myId) myRankIndex = i;
+  });
+
+  const createEntry = (p, rank) => {
     const el = document.createElement('div');
     el.className = 'lb-entry';
     el.innerHTML = `
-      <div class="lb-rank">#${i+1}</div>
+      <div class="lb-rank">#${rank}</div>
       <div class="lb-dot" style="background-color: ${p.color}"></div>
       <div class="lb-name">${p.name} ${p.id === gameState.myId ? '(คุณ)' : ''}</div>
       <div class="lb-score">${p.score}</div>
     `;
-    leaderboardList.appendChild(el);
+    return el;
+  };
+
+  const topPlayers = sorted.slice(0, 3);
+  topPlayers.forEach((p, i) => {
+    leaderboardList.appendChild(createEntry(p, i + 1));
   });
+
+  if (myRankIndex >= 3) {
+    const dots = document.createElement('div');
+    dots.style.textAlign = 'center';
+    dots.style.color = 'var(--gold)';
+    dots.style.fontSize = '12px';
+    dots.style.margin = '2px 0';
+    dots.textContent = '...';
+    leaderboardList.appendChild(dots);
+    
+    leaderboardList.appendChild(createEntry(sorted[myRankIndex], myRankIndex + 1));
+  }
 }
 
-function updateMovement() {
+function updateMovement(dt) {
   const me = gameState.players[gameState.myId];
-  if (!me || !gameState.active || gameState.isPaused) return;
+  if (!me || me.isDead) return;
   
   let dx = 0;
   let dy = 0;
@@ -492,14 +600,21 @@ function updateMovement() {
   if (dx !== 0 || dy !== 0) {
     // Normalize
     const len = Math.sqrt(dx*dx + dy*dy);
-    dx = (dx/len) * PLAYER_SPEED;
-    dy = (dy/len) * PLAYER_SPEED;
+    const cappedDt = Math.min(dt, 0.1); // prevent huge jumps if tab is backgrounded
+    const PLAYER_SPEED = 180;
+    
+    dx = (dx/len) * PLAYER_SPEED * cappedDt;
+    dy = (dy/len) * PLAYER_SPEED * cappedDt;
     
     me.x = Math.max(20, Math.min(gameState.mapWidth - 20, me.x + dx));
     me.y = Math.max(20, Math.min(gameState.mapHeight - 20, me.y + dy));
     me.direction = dir;
     
-    socket.emit('playerMove', { x: me.x, y: me.y, direction: dir });
+    const now = Date.now();
+    if (now - lastMoveEmitTime > 66) { // ~15 FPS max network emit rate
+      socket.emit('playerMove', { x: me.x, y: me.y, direction: dir });
+      lastMoveEmitTime = now;
+    }
   }
 }
 
@@ -628,7 +743,14 @@ function drawPlayer(player) {
   // Draw Pixel Art Sprite
   const spriteType = (player.color === '#f472b6' || player.color === '#c084fc') ? 'mage' : 'knight';
   const scale = 3; // 16x16 * 3 = 48x48
-  renderSprite(ctx, spriteType, px, py, scale, player.color, player.direction);
+  
+  if (player.isDead) {
+    ctx.globalAlpha = 0.5; // Make ghost-like
+    renderSprite(ctx, spriteType, px, py, scale, '#9e9e9e', player.direction); // Gray color
+    ctx.globalAlpha = 1.0;
+  } else {
+    renderSprite(ctx, spriteType, px, py, scale, player.color, player.direction);
+  }
   
   // Name tag
   ctx.fillStyle = 'rgba(62, 39, 35, 0.8)';
@@ -645,12 +767,21 @@ function drawPlayer(player) {
   ctx.fillText(player.name, px, py - 32);
   
   // Attacking effect
-  if (player.isAttacking) {
+  if (player.isAttacking && !player.isDead) {
     ctx.strokeStyle = 'white';
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(px, py, 35, 0, Math.PI * 2);
     ctx.stroke();
+  }
+  
+  // Draw HP bar
+  if (!player.isDead) {
+    const hpPct = Math.max(0, player.hp / player.maxHp);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(px - 16, py - 48, 32, 6);
+    ctx.fillStyle = hpPct > 0.5 ? '#4ade80' : hpPct > 0.2 ? '#facc15' : '#ef4444';
+    ctx.fillRect(px - 15, py - 47, 30 * hpPct, 4);
   }
 }
 
@@ -663,6 +794,9 @@ const MONSTER_SPRITE_MAP = {
   '⚡ จอมมารแห่งความรู้ ⚡': 'boss'
 };
 
+const bossImg = new Image();
+bossImg.src = 'boss.png';
+
 function drawMonster(monster) {
   const mx = monster.x - gameState.camera.x;
   const my = monster.y - gameState.camera.y;
@@ -673,13 +807,18 @@ function drawMonster(monster) {
   ctx.ellipse(mx, my + monster.size/2, monster.size/1.5, monster.size/3, 0, 0, Math.PI * 2);
   ctx.fill();
   
-  // Draw Pixel Art Sprite
-  const spriteType = MONSTER_SPRITE_MAP[monster.name] || 'slime';
-  const scale = monster.isLastBoss ? 6 : (monster.size / 10);
-  
-  // Bobbing
+  // Draw Boss or Pixel Art Sprite
   let bob = Math.sin(Date.now() / 200 + monster.id.charCodeAt(0)) * 5;
-  renderSprite(ctx, spriteType, mx, my + bob, scale, monster.color, 'down');
+  
+  if (monster.isLastBoss && bossImg.complete) {
+    const imgW = 140;
+    const imgH = 200;
+    ctx.drawImage(bossImg, mx - imgW/2, my + monster.size/2 - imgH + bob, imgW, imgH);
+  } else {
+    const spriteType = MONSTER_SPRITE_MAP[monster.name] || 'slime';
+    const scale = monster.isLastBoss ? 6 : (monster.size / 10);
+    renderSprite(ctx, spriteType, mx, my + bob, scale, monster.color, 'down');
+  }
   
   // Medieval HP Bar
   const hpPct = Math.max(0, monster.currentHp / monster.hp);
@@ -860,12 +999,21 @@ function createDamageText(x, y, amount) {
   });
 }
 
+let lastFrameTime = 0;
+
 // ─── Main Loop ───
-function gameLoop() {
-  if (!gameState.active) return;
+function gameLoop(timestamp) {
+  if (!gameState.active) {
+    lastFrameTime = 0;
+    return;
+  }
+  
+  if (!lastFrameTime) lastFrameTime = timestamp;
+  const dt = (timestamp - lastFrameTime) / 1000;
+  lastFrameTime = timestamp;
   
   if (!gameState.isPaused) {
-    updateMovement();
+    updateMovement(dt);
     updateCamera();
   }
   
@@ -953,3 +1101,13 @@ style.innerHTML = `
 }
 `;
 document.head.appendChild(style);
+
+// Start lobby music on load and attach UI click sounds
+if (typeof AudioManager !== 'undefined') {
+  AudioManager.playBGM('lobby');
+  document.addEventListener('click', (e) => {
+    if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+      AudioManager.playSFX('click');
+    }
+  });
+}

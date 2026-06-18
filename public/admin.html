@@ -46,7 +46,20 @@
   </style>
 </head>
 <body>
-  <div class="admin-container">
+  <!-- Login Overlay -->
+  <div id="loginOverlay" class="modal" style="display: flex;">
+    <div class="modal-overlay"></div>
+    <div class="modal-content medieval-panel" style="max-width: 400px; padding: 30px; text-align: center;">
+      <h2 style="color: #8b0000; font-family: var(--font-en); margin-bottom: 20px;">🔒 ผู้พิทักษ์คลังคำถาม</h2>
+      <p style="margin-bottom: 20px; color: var(--text-dark); font-weight: bold;">กรุณาใส่รหัสผ่านเพื่อเข้าสู่ระบบ Admin</p>
+      <input type="password" id="adminPwd" placeholder="รหัสผ่าน..." style="width: 100%; padding: 12px; margin-bottom: 20px; text-align: center; font-size: 18px; border: 2px solid #8b4513; border-radius: 4px; background: #fffdf5; font-family: var(--font-th);">
+      <button id="btnAdminLogin" class="btn-save" style="width: 100%;">🔑 เข้าสู่ระบบ</button>
+      <div id="loginError" style="color: red; margin-top: 10px; font-weight: bold; display: none;">รหัสผ่านไม่ถูกต้อง!</div>
+      <a href="index.html" style="display: inline-block; margin-top: 15px; color: #5d4037; text-decoration: underline;">กลับไปหน้าเกม</a>
+    </div>
+  </div>
+
+  <div class="admin-container" id="adminContent" style="display: none;">
     <div class="header-bar">
       <h1>⚙️ คลังคำถาม (Admin)</h1>
       <a href="index.html" class="back-btn">⬅ กลับไปหน้าเกม</a>
@@ -62,6 +75,16 @@
           <div class="form-group">
             <label for="qText">คำถาม</label>
             <textarea id="qText" rows="3" required placeholder="พิมพ์คำถามที่นี่..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="qDifficulty">ระดับความยาก (สัมพันธ์กับมอนสเตอร์)</label>
+            <select id="qDifficulty" required>
+              <option value="easy">🟢 ง่าย (สไลม์, ค้างคาว)</option>
+              <option value="medium">🗿 ปานกลาง (หมาป่า, โกเลม)</option>
+              <option value="hard">🐉 ยาก (มังกรน้อย)</option>
+              <option value="boss">👹 บอสใหญ่ (จอมมาร)</option>
+            </select>
           </div>
           
           <div class="form-group choices-container">
@@ -102,6 +125,7 @@
         <div class="q-list" id="qList">
           <div style="text-align: center; padding: 20px;">กำลังโหลดคำถาม...</div>
         </div>
+      </div>
       </div>
     </div>
   </div>

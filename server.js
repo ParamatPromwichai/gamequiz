@@ -27,6 +27,16 @@ function saveQuestions() {
 }
 
 // ─── Admin API Routes ───
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '1234';
+
+app.use('/api/questions', (req, res, next) => {
+  const pwd = req.headers['x-admin-password'];
+  if (pwd !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+});
+
 app.get('/api/questions', (req, res) => res.json(questions));
 app.post('/api/questions', (req, res) => {
   const newQ = req.body;
@@ -56,24 +66,20 @@ app.delete('/api/questions/:id', (req, res) => {
 });
 
 // ─── Game Config ───
-const GAME_DURATION = 180; 
-const LAST_BOSS_TIME = 30; 
-const MAP_WIDTH = 2400;
-const MAP_HEIGHT = 1600;
-const MONSTER_SPAWN_INTERVAL = 6000;
-const MAX_MONSTERS = 8;
+const GAME_DURATION = 180; // default backup 
+const LAST_BOSS_TIME = 30;
 const PLAYER_ATTACK_DAMAGE = 10;
 const ATTACK_RANGE = 60;
 
 const MONSTER_TYPES = [
-  { name: 'สไลม์', emoji: '🟢', hp: 30, color: '#4ade80', size: 36, xp: 10 },
-  { name: 'ค้างคาว', emoji: '🦇', hp: 40, color: '#a78bfa', size: 32, xp: 15 },
-  { name: 'หมาป่า', emoji: '🐺', hp: 50, color: '#94a3b8', size: 40, xp: 20 },
-  { name: 'โกเลม', emoji: '🗿', hp: 70, color: '#f59e0b', size: 48, xp: 25 },
-  { name: 'มังกรน้อย', emoji: '🐉', hp: 90, color: '#ef4444', size: 44, xp: 30 },
+  { name: 'สไลม์', emoji: '🟢', hp: 30, color: '#4ade80', size: 36, xp: 10, difficulty: 'easy' },
+  { name: 'ค้างคาว', emoji: '🦇', hp: 40, color: '#a78bfa', size: 32, xp: 15, difficulty: 'easy' },
+  { name: 'หมาป่า', emoji: '🐺', hp: 50, color: '#94a3b8', size: 40, xp: 20, difficulty: 'medium' },
+  { name: 'โกเลม', emoji: '🗿', hp: 70, color: '#f59e0b', size: 48, xp: 25, difficulty: 'medium' },
+  { name: 'มังกรน้อย', emoji: '🐉', hp: 90, color: '#ef4444', size: 44, xp: 30, difficulty: 'hard' },
 ];
 const LAST_BOSS_TEMPLATE = {
-  name: '⚡ จอมมารแห่งความรู้ ⚡', emoji: '👹', hp: 300, color: '#dc2626', size: 72, xp: 100, isLastBoss: true,
+  name: '⚡ จอมมารแห่งความรู้ ⚡', emoji: '👹', hp: 300, color: '#dc2626', size: 72, xp: 200, isLastBoss: true, difficulty: 'boss'
 };
 const PLAYER_COLORS = ['#f472b6', '#60a5fa', '#4ade80', '#facc15', '#c084fc', '#fb923c', '#2dd4bf', '#f87171'];
 
@@ -90,7 +96,7 @@ function generateRoomCode() {
   return code;
 }
 
-function getRandomQuestion(usedSet) {
+function getRandomQuestion(usedSet, difficulty) {
   if (!questions || questions.length === 0) {
     return {
       question: 'ข้อใดคือเมืองหลวงของประเทศไทย?',
@@ -100,30 +106,58 @@ function getRandomQuestion(usedSet) {
       index: 0
     };
   }
-  if (usedSet.size >= questions.length) usedSet.clear();
+  
+  let filteredIndices = [];
+  for (let i = 0; i < questions.length; i++) {
+    if (questions[i].difficulty === difficulty) {
+      filteredIndices.push(i);
+    }
+  }
+  
+  // Fallback if no questions of that difficulty
+  if (filteredIndices.length === 0) {
+    for (let i = 0; i < questions.length; i++) {
+      filteredIndices.push(i);
+    }
+  }
+
+  let allUsed = true;
+  for (const idx of filteredIndices) {
+    if (!usedSet.has(idx)) {
+      allUsed = false;
+      break;
+    }
+  }
+  
+  if (allUsed) {
+    for (const idx of filteredIndices) usedSet.delete(idx);
+  }
+
   let idx;
   let attempts = 0;
   do {
-    idx = Math.floor(Math.random() * questions.length);
+    const r = Math.floor(Math.random() * filteredIndices.length);
+    idx = filteredIndices[r];
     attempts++;
     if (attempts > 100) break; 
   } while (usedSet.has(idx));
+  
   usedSet.add(idx);
   return { ...questions[idx], index: idx };
 }
 
-function getRandomPosition(padding = 100) {
+function getRandomPosition(mapW, mapH, padding = 100) {
   return {
-    x: padding + Math.random() * (MAP_WIDTH - padding * 2),
-    y: padding + Math.random() * (MAP_HEIGHT - padding * 2),
+    x: padding + Math.random() * (mapW - padding * 2),
+    y: padding + Math.random() * (mapH - padding * 2),
   };
 }
 
 function spawnRoomMonster(room, forceType = null) {
-  if (Object.keys(room.monsters).length >= MAX_MONSTERS && !forceType) return;
+  if (Object.keys(room.monsters).length >= room.maxMonsters && !forceType) return;
   const id = 'mon_' + room.monsterIdCounter++;
   const template = forceType || MONSTER_TYPES[Math.floor(Math.random() * MONSTER_TYPES.length)];
-  const pos = getRandomPosition(150);
+  const pos = getRandomPosition(room.mapWidth, room.mapHeight, 150);
   room.monsters[id] = { id, ...template, currentHp: template.hp, x: pos.x, y: pos.y, spawnTime: Date.now(), attackedBy: {} };
   io.to(room.code).emit('monsterSpawned', room.monsters[id]);
 }
@@ -133,23 +167,29 @@ function startRoomGame(roomCode) {
   if (!room || room.gameActive) return;
   
   room.gameActive = true;
-  room.timeRemaining = GAME_DURATION;
+  room.timeRemaining = room.duration || GAME_DURATION;
   room.lastBossSpawned = false;
   room.monsters = {};
   room.monsterIdCounter = 0;
   room.usedQuestionIndices.clear();
 
+  room.mapWidth = 2400 + (room.maxPlayers * 50);
+  room.mapHeight = 1600 + (room.maxPlayers * 50);
+  room.maxMonsters = Math.max(8, Math.floor(room.maxPlayers * 1.5));
+  room.spawnInterval = Math.max(1000, 6000 - (room.maxPlayers * 100));
+
   Object.values(room.players).forEach(p => {
     p.score = 0; p.monstersKilled = 0; p.correctAnswers = 0; p.pendingQuestion = null;
-    const pos = getRandomPosition(200);
+    p.hp = 100; p.maxHp = 100; p.isDead = false;
+    const pos = getRandomPosition(room.mapWidth, room.mapHeight, 200);
     p.x = pos.x; p.y = pos.y;
   });
 
   for (let i = 0; i < 4; i++) spawnRoomMonster(room);
 
   room.monsterSpawner = setInterval(() => {
-    if (room.gameActive && Object.keys(room.monsters).length < MAX_MONSTERS && !room.isPaused) spawnRoomMonster(room);
-  }, MONSTER_SPAWN_INTERVAL);
+    if (room.gameActive && Object.keys(room.monsters).length < room.maxMonsters && !room.isPaused) spawnRoomMonster(room);
+  }, room.spawnInterval);
 
   room.gameTimer = setInterval(() => {
     if (room.isPaused) return;
@@ -157,21 +197,22 @@ function startRoomGame(roomCode) {
     if (room.timeRemaining === LAST_BOSS_TIME && !room.lastBossSpawned) {
       room.lastBossSpawned = true;
       const id = 'boss_final';
-      room.monsters[id] = { id, ...LAST_BOSS_TEMPLATE, currentHp: LAST_BOSS_TEMPLATE.hp, x: MAP_WIDTH/2, y: MAP_HEIGHT/2, spawnTime: Date.now(), attackedBy: {} };
+      const bossHp = 300 + (room.maxPlayers * 150);
+      room.monsters[id] = { id, ...LAST_BOSS_TEMPLATE, currentHp: bossHp, hp: bossHp, x: room.mapWidth/2, y: room.mapHeight/2, spawnTime: Date.now(), attackedBy: {} };
       io.to(room.code).emit('lastBossSpawned', room.monsters[id]);
       io.to(room.code).emit('announcement', { text: '⚡ จอมมารแห่งความรู้ปรากฏตัว! ⚡', type: 'boss' });
     }
-    io.to(room.code).emit('timerUpdate', { timeRemaining: room.timeRemaining, totalTime: GAME_DURATION });
+    io.to(room.code).emit('timerUpdate', { timeRemaining: room.timeRemaining, totalTime: room.duration || GAME_DURATION });
     if (room.timeRemaining <= 0) endRoomGame(roomCode);
   }, 1000);
 
   io.to(room.code).emit('gameStarted', {
     timeRemaining: room.timeRemaining,
-    totalTime: GAME_DURATION,
+    totalTime: room.duration || GAME_DURATION,
     monsters: room.monsters,
     players: getPublicPlayers(room),
-    mapWidth: MAP_WIDTH,
-    mapHeight: MAP_HEIGHT
+    mapWidth: room.mapWidth,
+    mapHeight: room.mapHeight
   });
   io.to(room.code).emit('announcement', { text: '🎮 เกมเริ่มแล้ว! ล่ามอนสเตอร์และตอบคำถามเพื่อทำคะแนน!', type: 'start' });
 }
@@ -192,7 +233,7 @@ function getPublicPlayers(room) {
   const pub = {};
   Object.keys(room.players).forEach(id => {
     const p = room.players[id];
-    pub[id] = { id, name: p.name, x: p.x, y: p.y, color: p.color, score: p.score, direction: p.direction, isAttacking: p.isAttacking, monstersKilled: p.monstersKilled };
+    pub[id] = { id, name: p.name, x: p.x, y: p.y, color: p.color, score: p.score, direction: p.direction, isAttacking: p.isAttacking, monstersKilled: p.monstersKilled, hp: p.hp, maxHp: p.maxHp, isDead: p.isDead };
   });
   return pub;
 }
@@ -214,7 +255,9 @@ io.on('connection', (socket) => {
       usedQuestionIndices: new Set(),
       monsterIdCounter: 0,
       pauseVotes: new Set(),
-      isPaused: false
+      isPaused: false,
+      readyVotes: new Set(),
+      duration: data.duration ? parseInt(data.duration) : GAME_DURATION
     };
     
     joinRoomLogic(socket, code, data.name);
@@ -241,6 +284,7 @@ io.on('connection', (socket) => {
       name: playerName || 'ผู้กล้า',
       x: 0, y: 0, // Assigned later
       color: PLAYER_COLORS[colorIndex],
+      hp: 100, maxHp: 100, isDead: false,
       score: 0, monstersKilled: 0, correctAnswers: 0,
       direction: 'down', isAttacking: false, pendingQuestion: null,
     };
@@ -257,21 +301,20 @@ io.on('connection', (socket) => {
     socket.to(code).emit('lobbyUpdate', {
       currentPlayers: currentCount,
       maxPlayers: room.maxPlayers,
-      players: Object.values(room.players).map(p => ({ id: p.id, name: p.name, color: p.color }))
+      players: Object.values(room.players).map(p => ({ 
+        id: p.id, name: p.name, color: p.color,
+        ready: room.readyVotes.has(p.id)
+      }))
     });
-
-    if (currentCount >= room.maxPlayers) {
-      io.to(code).emit('lobbyCountdown', 3);
-      setTimeout(() => startRoomGame(code), 3000);
-    }
   }
 
   socket.on('playerMove', (data) => {
     if (!currentRoom || !rooms[currentRoom]) return;
-    const p = rooms[currentRoom].players[socket.id];
-    if(!p) return;
-    p.x = Math.max(20, Math.min(MAP_WIDTH - 20, data.x));
-    p.y = Math.max(20, Math.min(MAP_HEIGHT - 20, data.y));
+    const room = rooms[currentRoom];
+    const p = room.players[socket.id];
+    if(!p || p.isDead) return;
+    p.x = Math.max(20, Math.min(room.mapWidth - 20, data.x));
+    p.y = Math.max(20, Math.min(room.mapHeight - 20, data.y));
     p.direction = data.direction || p.direction;
     socket.to(currentRoom).emit('playerMoved', { id: socket.id, x: p.x, y: p.y, direction: p.direction });
   });
@@ -283,7 +326,7 @@ io.on('connection', (socket) => {
     
     const player = room.players[socket.id];
     const monster = room.monsters[data.monsterId];
-    if (!player || !monster || player.pendingQuestion) return;
+    if (!player || !monster || player.pendingQuestion || player.isDead) return;
 
     const dist = Math.sqrt(Math.pow(player.x - monster.x, 2) + Math.pow(player.y - monster.y, 2));
     if (dist > ATTACK_RANGE + monster.size) return;
@@ -298,8 +341,8 @@ io.on('connection', (socket) => {
     io.to(currentRoom).emit('monsterDamaged', { monsterId: monster.id, currentHp: monster.currentHp, maxHp: monster.hp, attackerId: socket.id, damage: PLAYER_ATTACK_DAMAGE });
 
     if (monster.currentHp <= 0) {
-      const question = getRandomQuestion(room.usedQuestionIndices);
-      player.pendingQuestion = { ...question, monsterId: monster.id, monsterXp: monster.xp, isLastBoss: monster.isLastBoss || false };
+      const question = getRandomQuestion(room.usedQuestionIndices, monster.difficulty || 'easy');
+      player.pendingQuestion = { ...question, monsterId: monster.id, monsterXp: monster.xp, isLastBoss: monster.isLastBoss || false, difficulty: monster.difficulty || 'easy' };
       
       io.to(currentRoom).emit('monsterDefeated', { monsterId: monster.id, killedBy: socket.id, playerName: player.name, monsterName: monster.name });
       delete room.monsters[monster.id];
@@ -354,11 +397,22 @@ io.on('connection', (socket) => {
           }
           io.to(currentRoom).emit('pauseStatus', { votes: room.pauseVotes.size, total: newTotal, isPaused: room.isPaused });
         } else {
+          if (room.readyVotes) room.readyVotes.delete(socket.id);
+          const currentCount = Object.keys(room.players).length;
           io.to(currentRoom).emit('lobbyUpdate', {
-            currentPlayers: Object.keys(room.players).length,
+            currentPlayers: currentCount,
             maxPlayers: room.maxPlayers,
-            players: Object.values(room.players).map(p => ({ id: p.id, name: p.name, color: p.color }))
+            players: Object.values(room.players).map(p => ({ 
+              id: p.id, name: p.name, color: p.color,
+              ready: room.readyVotes ? room.readyVotes.has(p.id) : false
+            }))
           });
+          
+          if (currentCount > 0 && room.readyVotes && room.readyVotes.size >= currentCount) {
+            room.readyVotes.clear();
+            io.to(currentRoom).emit('lobbyCountdown', 3);
+            setTimeout(() => startRoomGame(currentRoom), 3000);
+          }
         }
 
         if (Object.keys(room.players).length === 0) {
@@ -379,7 +433,7 @@ io.on('connection', (socket) => {
 
     const pq = player.pendingQuestion;
     const isCorrect = data.answer === pq.correctAnswer;
-    const points = isCorrect ? (pq.isLastBoss ? pq.monsterXp * 3 : pq.monsterXp) : 0;
+    const points = isCorrect ? pq.monsterXp : 0;
 
     if (isCorrect) {
       player.score += points; player.correctAnswers++; player.monstersKilled++;
@@ -387,12 +441,53 @@ io.on('connection', (socket) => {
       io.to(currentRoom).emit('scoreUpdate', { playerId: socket.id, playerName: player.name, score: player.score, points });
       io.to(currentRoom).emit('announcement', { text: `✅ ${player.name} ตอบถูก! +${points} คะแนน`, type: 'correct' });
     } else {
-      player.monstersKilled++;
+      player.monstersKilled++; // technically they killed it, but got wrong answer
+      
+      let damage = 10;
+      if (pq.difficulty === 'medium') damage = 20;
+      if (pq.difficulty === 'hard') damage = 30;
+      if (pq.difficulty === 'boss' || pq.isLastBoss) damage = 100;
+      
+      player.hp = Math.max(0, player.hp - damage);
+      if (player.hp <= 0) player.isDead = true;
+
       socket.emit('answerResult', { correct: false, points: 0, correctAnswer: pq.correctAnswer, explanation: pq.explanation, newScore: player.score });
-      io.to(currentRoom).emit('announcement', { text: `❌ ${player.name} ตอบผิด ไม่ได้คะแนน`, type: 'wrong' });
+      io.to(currentRoom).emit('hpUpdate', { playerId: socket.id, hp: player.hp, maxHp: player.maxHp, damage: damage, isDead: player.isDead });
+      
+      if (player.isDead) {
+        io.to(currentRoom).emit('playerDied', { playerId: socket.id, playerName: player.name });
+        io.to(currentRoom).emit('announcement', { text: `☠️ ${player.name} พลาดท่าและสิ้นชีพ!`, type: 'wrong' });
+      } else {
+        io.to(currentRoom).emit('announcement', { text: `❌ ${player.name} ตอบผิด เสียเลือด ${damage} HP`, type: 'wrong' });
+      }
     }
     player.pendingQuestion = null;
     io.to(currentRoom).emit('leaderboardUpdate', getPublicPlayers(room));
+  });
+
+  socket.on('playerReady', () => {
+    if (!currentRoom || !rooms[currentRoom]) return;
+    const room = rooms[currentRoom];
+    if (room.gameActive) return;
+
+    if (!room.readyVotes) room.readyVotes = new Set();
+    room.readyVotes.add(socket.id);
+
+    const currentCount = Object.keys(room.players).length;
+    io.to(currentRoom).emit('lobbyUpdate', {
+      currentPlayers: currentCount,
+      maxPlayers: room.maxPlayers,
+      players: Object.values(room.players).map(p => ({ 
+        id: p.id, name: p.name, color: p.color, 
+        ready: room.readyVotes.has(p.id) 
+      }))
+    });
+
+    if (currentCount > 0 && room.readyVotes.size >= currentCount) {
+      room.readyVotes.clear();
+      io.to(currentRoom).emit('lobbyCountdown', 3);
+      setTimeout(() => startRoomGame(currentRoom), 3000);
+    }
   });
 
   socket.on('disconnect', () => {
@@ -406,12 +501,22 @@ io.on('connection', (socket) => {
           io.to(currentRoom).emit('playerLeft', { id: socket.id, name: pName });
           io.to(currentRoom).emit('announcement', { text: `👋 ${pName} ออกจากเกม`, type: 'leave' });
         } else {
+          if (room.readyVotes) room.readyVotes.delete(socket.id);
           const currentCount = Object.keys(room.players).length;
           io.to(currentRoom).emit('lobbyUpdate', {
             currentPlayers: currentCount,
             maxPlayers: room.maxPlayers,
-            players: Object.values(room.players).map(p => ({ id: p.id, name: p.name, color: p.color }))
+            players: Object.values(room.players).map(p => ({ 
+              id: p.id, name: p.name, color: p.color,
+              ready: room.readyVotes ? room.readyVotes.has(p.id) : false
+            }))
           });
+          
+          if (currentCount > 0 && room.readyVotes && room.readyVotes.size >= currentCount) {
+            room.readyVotes.clear();
+            io.to(currentRoom).emit('lobbyCountdown', 3);
+            setTimeout(() => startRoomGame(currentRoom), 3000);
+          }
         }
         
         if (Object.keys(room.players).length === 0) {

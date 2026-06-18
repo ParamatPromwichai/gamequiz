@@ -6,11 +6,42 @@ document.addEventListener('DOMContentLoaded', () => {
   const formTitle = document.getElementById('formTitle');
   
   let questions = [];
+  let adminPwdValue = '';
+
+  // Login Logic
+  const loginOverlay = document.getElementById('loginOverlay');
+  const adminContent = document.getElementById('adminContent');
+  const btnAdminLogin = document.getElementById('btnAdminLogin');
+  const adminPwd = document.getElementById('adminPwd');
+  const loginError = document.getElementById('loginError');
+
+  btnAdminLogin.addEventListener('click', async () => {
+    adminPwdValue = adminPwd.value;
+    try {
+      const res = await fetch('/api/questions', {
+        headers: { 'x-admin-password': adminPwdValue }
+      });
+      if (res.ok) {
+        questions = await res.json();
+        loginOverlay.style.display = 'none';
+        adminContent.style.display = 'block';
+        renderList();
+      } else {
+        loginError.style.display = 'block';
+      }
+    } catch (err) {
+      console.error(err);
+      loginError.style.display = 'block';
+    }
+  });
 
   // Fetch all questions
   async function loadQuestions() {
+    if (!adminPwdValue) return;
     try {
-      const res = await fetch('/api/questions');
+      const res = await fetch('/api/questions', {
+        headers: { 'x-admin-password': adminPwdValue }
+      });
       questions = await res.json();
       renderList();
     } catch (err) {
@@ -35,8 +66,11 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const correctText = q.choices[q.correctAnswer] || 'ไม่มีเฉลย';
       
+      const diffMap = { 'easy': '🟢 ง่าย', 'medium': '🗿 ปานกลาง', 'hard': '🐉 ยาก', 'boss': '👹 บอส' };
+      const diffBadge = diffMap[q.difficulty || 'easy'];
+      
       el.innerHTML = `
-        <div class="q-title">${index + 1}. ${q.question}</div>
+        <div class="q-title"><span style="font-size:12px; background:#f4e8c1; border:1px solid #b8860b; padding:2px 6px; border-radius:10px; margin-right:8px;">${diffBadge}</span> ${index + 1}. ${q.question}</div>
         <div class="q-desc">
           <strong>เฉลย:</strong> ${correctText} <br>
           <small style="color: #666;">${q.explanation ? 'อธิบาย: ' + q.explanation : ''}</small>
@@ -64,7 +98,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('qC3').value
       ],
       correctAnswer: parseInt(document.querySelector('input[name="qCorrect"]:checked').value),
-      explanation: document.getElementById('qExp').value
+      explanation: document.getElementById('qExp').value,
+      difficulty: document.getElementById('qDifficulty').value
     };
 
     try {
@@ -72,7 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Add
         await fetch('/api/questions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPwdValue },
           body: JSON.stringify(qData)
         });
         alert('เพิ่มคำถามสำเร็จ!');
@@ -80,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Edit
         await fetch(`/api/questions/${id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPwdValue },
           body: JSON.stringify(qData)
         });
         alert('แก้ไขคำถามสำเร็จ!');
@@ -105,6 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('qC3').value = q.choices[3] || '';
     document.querySelector(`input[name="qCorrect"][value="${q.correctAnswer}"]`).checked = true;
     document.getElementById('qExp').value = q.explanation || '';
+    document.getElementById('qDifficulty').value = q.difficulty || 'easy';
     
     formTitle.textContent = '✏️ แก้ไขคำถาม';
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -115,7 +151,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!confirm('คุณแน่ใจหรือไม่ที่จะลบคำถามข้อนี้?')) return;
     
     try {
-      await fetch(`/api/questions/${index}`, { method: 'DELETE' });
+      await fetch(`/api/questions/${index}`, { 
+        method: 'DELETE',
+        headers: { 'x-admin-password': adminPwdValue }
+      });
       loadQuestions();
     } catch (err) {
       console.error(err);
@@ -132,7 +171,5 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   btnCancel.addEventListener('click', clearForm);
-
-  // Initial load
-  loadQuestions();
+  // removed auto loadQuestions();
 });
