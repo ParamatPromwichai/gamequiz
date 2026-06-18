@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚙️ จัดการคำถาม - Social Quest Admin</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body { background: var(--bg-dark); padding: 40px; overflow-y: auto; height: auto; }
+    .admin-container { max-width: 900px; margin: 0 auto; }
+    .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+    .header-bar h1 { color: var(--gold); font-family: var(--font-en); font-size: 32px; text-shadow: 2px 2px 4px #000; }
+    .back-btn { padding: 8px 16px; background: var(--bg-wood); border: 2px solid #b8860b; color: #fff; text-decoration: none; border-radius: 4px; font-family: var(--font-th); font-weight: bold; }
+    .back-btn:hover { background: #5d4037; }
+    
+    .content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+    @media (max-width: 768px) { .content-grid { grid-template-columns: 1fr; } }
+    
+    .panel { padding: 24px; }
+    .panel h2 { color: #8b0000; border-bottom: 2px solid #8b4513; padding-bottom: 10px; margin-bottom: 20px; font-family: var(--font-en); }
+    
+    /* Form Styles */
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-weight: bold; margin-bottom: 8px; color: #5d4037; }
+    .form-group input, .form-group textarea, .form-group select { 
+      width: 100%; padding: 10px; border: 2px solid #8b4513; border-radius: 4px; background: #fffdf5; font-family: var(--font-th);
+    }
+    .choices-container { background: rgba(139, 69, 19, 0.1); padding: 10px; border-radius: 4px; border: 1px dashed #8b4513; }
+    .choice-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+    .choice-row input[type="radio"] { width: auto; transform: scale(1.5); }
+    .choice-row input[type="text"] { flex: 1; }
+    
+    .btn-row { display: flex; gap: 10px; margin-top: 20px; }
+    .btn-save { background: var(--success); color: white; padding: 12px; border: 2px solid #1b5e20; border-radius: 4px; flex: 1; cursor: pointer; font-weight: bold; font-family: var(--font-th); font-size: 16px; }
+    .btn-clear { background: var(--bg-wood); color: white; padding: 12px; border: 2px solid #2e1d15; border-radius: 4px; cursor: pointer; font-family: var(--font-th); }
+    
+    /* List Styles */
+    .q-list { display: flex; flex-direction: column; gap: 12px; max-height: 600px; overflow-y: auto; padding-right: 10px; }
+    .q-item { background: #fff; border: 2px solid #8b4513; border-radius: 4px; padding: 16px; position: relative; }
+    .q-item:hover { border-color: var(--accent); background: #fdf5e6; }
+    .q-title { font-weight: bold; font-size: 16px; margin-bottom: 8px; color: var(--text-dark); }
+    .q-desc { font-size: 13px; color: #5d4037; margin-bottom: 12px; }
+    .q-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .btn-edit { background: #b8860b; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: var(--font-th); font-size: 12px; font-weight: bold; }
+    .btn-delete { background: var(--danger); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: var(--font-th); font-size: 12px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="admin-container">
+    <div class="header-bar">
+      <h1>⚙️ คลังคำถาม (Admin)</h1>
+      <a href="index.html" class="back-btn">⬅ กลับไปหน้าเกม</a>
+    </div>
+
+    <div class="content-grid">
+      <!-- Form Panel -->
+      <div class="medieval-panel panel">
+        <h2 id="formTitle">➕ เพิ่มคำถามใหม่</h2>
+        <form id="qForm">
+          <input type="hidden" id="editId" value="">
+          
+          <div class="form-group">
+            <label for="qText">คำถาม</label>
+            <textarea id="qText" rows="3" required placeholder="พิมพ์คำถามที่นี่..."></textarea>
+          </div>
+          
+          <div class="form-group choices-container">
+            <label>ตัวเลือก (เลือกข้อที่ถูก)</label>
+            <div class="choice-row">
+              <input type="radio" name="qCorrect" value="0" required checked>
+              <input type="text" id="qC0" required placeholder="ตัวเลือก A">
+            </div>
+            <div class="choice-row">
+              <input type="radio" name="qCorrect" value="1">
+              <input type="text" id="qC1" required placeholder="ตัวเลือก B">
+            </div>
+            <div class="choice-row">
+              <input type="radio" name="qCorrect" value="2">
+              <input type="text" id="qC2" required placeholder="ตัวเลือก C">
+            </div>
+            <div class="choice-row">
+              <input type="radio" name="qCorrect" value="3">
+              <input type="text" id="qC3" required placeholder="ตัวเลือก D">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="qExp">คำอธิบายเมื่อเฉลย (ใส่เพื่อเป็นความรู้)</label>
+            <textarea id="qExp" rows="2" placeholder="อธิบายเหตุผล..."></textarea>
+          </div>
+
+          <div class="btn-row">
+            <button type="submit" class="btn-save">💾 บันทึกคำถาม</button>
+            <button type="button" class="btn-clear" id="btnCancel">ยกเลิก/ล้างฟอร์ม</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- List Panel -->
+      <div class="medieval-panel panel">
+        <h2>📚 รายการคำถามทั้งหมด (<span id="qCount">0</span> ข้อ)</h2>
+        <div class="q-list" id="qList">
+          <div style="text-align: center; padding: 20px;">กำลังโหลดคำถาม...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>

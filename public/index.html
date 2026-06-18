@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="เกมตีบอสตอบคำถามวิชาสังคมออนไลน์">
+  <title>⚔️ Social Quest Online</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="loginScreen" class="screen active">
+    <div class="login-bg"></div>
+    <div class="login-container">
+      <div class="login-card medieval-panel">
+        <div class="game-logo">
+          <div class="logo-icon">⚔️</div>
+          <h1 class="logo-title">Social Quest</h1>
+          <p class="logo-subtitle">สังคมศึกษาผจญภัย</p>
+        </div>
+        <div class="login-form">
+          <div class="input-group">
+            <label for="playerName">นามแห่งผู้กล้า</label>
+            <input type="text" id="playerName" placeholder="ใส่ชื่อ..." maxlength="12" autocomplete="off">
+          </div>
+          
+          <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <div style="flex: 1;">
+              <label for="maxPlayers" style="font-size:12px; color:#5d4037; font-weight:bold; text-transform:uppercase;">จำนวนคนที่ต้องการ</label>
+              <input type="number" id="maxPlayers" min="1" max="10" value="2" style="width: 100%; padding: 10px; border: 2px solid #8b4513; border-radius:4px; font-family: var(--font-th); text-align: center; font-weight: bold; font-size: 16px; background: #fffdf5;">
+            </div>
+            <button id="createRoomBtn" class="btn-primary" style="flex: 2; font-size: 16px; margin-top: 20px;">🏰 สร้างห้อง</button>
+          </div>
+          
+          <div style="display: flex; gap: 10px;">
+            <div style="flex: 1;">
+              <input type="text" id="roomCodeInput" placeholder="รหัสห้อง 4 หลัก..." maxlength="4" style="width: 100%; padding: 12px; border: 2px solid #8b4513; border-radius:4px; font-family: var(--font-th); text-transform: uppercase; font-weight: bold; font-size: 16px; text-align: center; background: #fffdf5;">
+            </div>
+            <button id="joinRoomBtn" class="btn-primary" style="flex: 2; font-size: 16px;">🤝 เข้าร่วมห้อง</button>
+          </div>
+          
+          <div class="game-info-cards" style="margin-top: 30px;">
+            <div class="info-card"><span class="info-icon">👥</span><span>เล่นหลายคน</span></div>
+            <div class="info-card"><span class="info-icon">📚</span><span>วิชาสังคม</span></div>
+            <div class="info-card"><span class="info-icon">⚔️</span><span>ตีมอนสเตอร์</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="admin-link-container">
+      <a href="admin.html" class="admin-link">⚙️ จัดการคำถาม (Admin)</a>
+    </div>
+  </div>
+
+  <div id="lobbyScreen" class="screen">
+    <div class="login-bg"></div>
+    <div class="login-container">
+      <div class="login-card medieval-panel">
+        <h2 style="font-family: var(--font-en); font-size: 32px; color: #8b0000; text-shadow: 2px 2px 0px #d4af37; letter-spacing: 2px;">รหัสห้อง: <span id="lobbyRoomCode" style="color: #1b5e20;"></span></h2>
+        <p style="font-size: 18px; color: #5d4037; font-weight: bold; margin: 15px 0; border-bottom: 2px solid #8b4513; padding-bottom: 10px;">
+          รอผู้กล้าเข้าร่วม (<span id="lobbyCount">0</span>/<span id="lobbyMax">0</span>)
+        </p>
+        
+        <div id="lobbyPlayers" style="display: flex; flex-direction: column; gap: 10px; margin: 20px 0; min-height: 150px; max-height: 250px; overflow-y: auto;">
+          <!-- players injected here -->
+        </div>
+        
+        <p id="lobbyStatus" style="font-weight:bold; color:var(--success); font-size: 20px; animation: pulse 1s infinite alternate;"></p>
+        <button id="leaveLobbyBtn" class="btn-primary" style="background: linear-gradient(to bottom, #d32f2f, #b71c1c); margin-top: 20px;">🚪 ออกจากห้อง</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="gameScreen" class="screen">
+    <div id="hud">
+      <div id="hudLeft">
+        <div class="hud-panel"><div class="hud-label">⏱️ เวลาที่เหลือ</div><div id="timerValue" class="hud-value">3:00</div><div class="timer-bar"><div id="timerFill" class="timer-fill"></div></div></div>
+        <div class="hud-panel"><div class="hud-label">⭐ แต้มสะสม</div><div id="scoreValue" class="hud-value">0</div></div>
+      </div>
+      <div id="hudCenter"><div id="announcements"></div></div>
+      <div id="hudRight">
+        <div class="hud-panel" style="display:flex; gap:10px; justify-content:space-between; padding: 6px 12px; margin-bottom: 8px;">
+          <button id="pauseBtn" style="background:none; border:none; color:var(--gold); font-family:var(--font-th); font-weight:bold; cursor:pointer; font-size:16px; display:flex; align-items:center; gap:4px;">⏸️ พักเกม</button>
+          <div style="width:2px; background:var(--bg-wood-light);"></div>
+          <button id="leaveGameBtn" style="background:none; border:none; color:#ff8a80; font-family:var(--font-th); font-weight:bold; cursor:pointer; font-size:16px; display:flex; align-items:center; gap:4px;">🚪 ออก</button>
+        </div>
+        <div class="hud-panel"><div class="hud-label">🏆 ทำเนียบผู้กล้า</div><div id="leaderboardList"></div></div>
+      </div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="minimap-container"><canvas id="minimapCanvas" width="150" height="150"></canvas></div>
+    <div id="controlsHint"><span>WASD = เดิน</span> | <span>Space/คลิก = โจมตี</span></div>
+
+    <div id="questionModal" class="modal hidden">
+      <div class="modal-overlay"></div>
+      <div class="modal-content question-modal medieval-panel">
+        <div class="question-header">
+          <div class="question-monster-badge" id="qMonsterBadge">🐉</div>
+          <h2 id="qTitle">คำถามจากอสูรกาย!</h2>
+          <p id="qMonsterInfo"></p>
+        </div>
+        <div class="question-body">
+          <p id="qText" class="question-text"></p>
+          <div id="qChoices" class="question-choices"></div>
+        </div>
+        <div id="qResult" class="question-result hidden"></div>
+      </div>
+    </div>
+
+    <div id="gameOverModal" class="modal hidden">
+      <div class="modal-overlay"></div>
+      <div class="modal-content gameover-modal medieval-panel">
+        <div class="gameover-header">
+          <div class="trophy-icon">🏆</div>
+          <h2>จบการผจญภัย!</h2>
+        </div>
+        <div id="rankingsList" class="rankings-list"></div>
+        <div style="display: flex; gap: 10px;">
+          <button id="playAgainBtn" class="btn-primary" style="flex: 1;"><span>🔄 เล่นอีกครั้ง</span></button>
+          <button id="leaveGameOverBtn" class="btn-primary" style="flex: 1; background: linear-gradient(to bottom, #d32f2f, #b71c1c);"><span>🚪 ออกจากห้อง</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mobileControls" class="hidden">
+    <div class="dpad">
+      <button class="dpad-btn dpad-up" data-dir="up">▲</button>
+      <button class="dpad-btn dpad-left" data-dir="left">◄</button>
+      <button class="dpad-btn dpad-right" data-dir="right">►</button>
+      <button class="dpad-btn dpad-down" data-dir="down">▼</button>
+    </div>
+    <button id="mobileAttackBtn" class="mobile-attack-btn">⚔️</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="sprites.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
