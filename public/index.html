@@ -24,6 +24,13 @@
             <input type="text" id="playerName" placeholder="ใส่ชื่อ..." maxlength="12" autocomplete="off">
           </div>
           
+          <div style="display:flex; justify-content:center; align-items:center; flex-direction:column; margin-bottom:15px;">
+            <div style="width:64px; height:64px; border-radius:50%; background:radial-gradient(circle, #fff, #f0e6d2); border:3px solid #8b4513; margin-bottom:10px; position:relative; overflow:hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
+              <canvas id="miniCharPreviewCanvas" width="64" height="64" style="position:absolute; top:0; left:0;"></canvas>
+            </div>
+            <button type="button" id="openCharModalBtn" style="padding: 8px 16px; background: #8b4513; color: white; border: 2px solid #5d4037; border-radius: 4px; cursor: pointer; font-family: var(--font-th); font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); transition: 0.2s;">✏️ แต่งตัวละคร</button>
+          </div>
+          
           <div style="display: flex; gap: 10px; margin-bottom: 15px;">
             <div style="flex: 1;">
               <label for="maxPlayers" style="font-size:12px; color:#5d4037; font-weight:bold; text-transform:uppercase;">จำนวนคน</label>
@@ -161,10 +168,42 @@
     </div>
     <button id="mobileAttackBtn" class="mobile-attack-btn">⚔️</button>
   </div>
+  
+  <!-- Character Customization Modal -->
+  <div id="characterModal" class="modal hidden">
+    <div class="modal-overlay" id="charModalOverlay"></div>
+    <div class="character-customization premium-panel" style="position: relative; z-index: 101; max-width: 320px; width: 100%;">
+      <button id="closeCharModalBtn" style="position: absolute; top: 10px; right: 10px; background: transparent; border: none; font-size: 20px; font-weight: bold; color: #8b0000; cursor: pointer; padding: 5px;">✕</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; margin-top:10px;">
+        <label style="font-size:18px; font-weight:900; color:#5d4037; font-family:var(--font-th);">เลือกรูปลักษณ์</label>
+        <div class="gender-toggle">
+          <button id="genderMBtn" class="gender-btn active">ชาย</button>
+          <button id="genderFBtn" class="gender-btn">หญิง</button>
+        </div>
+      </div>
+      
+      <div class="preview-container">
+        <button id="prevClassBtn" class="class-nav-btn">◀</button>
+        <div class="char-preview-box">
+          <canvas id="charPreviewCanvas" width="120" height="120"></canvas>
+        </div>
+        <button id="nextClassBtn" class="class-nav-btn">▶</button>
+      </div>
+      
+      <div id="charClassLabel" class="char-class-label">Knight</div>
+      
+      <div id="colorPalette" class="color-palette-grid">
+        <!-- colors injected here via JS -->
+      </div>
+      
+      <button type="button" id="confirmCharBtn" style="width: 100%; padding: 12px; margin-top: 15px; background: #4ade80; color: #166534; border: 2px solid #166534; border-radius: 6px; cursor: pointer; font-family: var(--font-th); font-weight: bold; font-size: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: 0.2s;">ยืนยัน</button>
+    </div>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="audio.js"></script>
   <script src="sprites.js"></script>
+  <script src="questions.js"></script>
+  <script src="audio.js"></script>
   <script src="game.js"></script>
   <script>
     function toggleGlobalMute() {

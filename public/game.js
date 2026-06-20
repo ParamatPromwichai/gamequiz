@@ -97,6 +97,7 @@ const dpadBtns = document.querySelectorAll('.dpad-btn');
 dpadBtns.forEach(btn => {
   const press = (e) => {
     e.preventDefault();
+    btn.classList.add('active');
     const dir = btn.dataset.dir;
     if (dir === 'up') keys.w = true;
     if (dir === 'down') keys.s = true;
@@ -105,6 +106,7 @@ dpadBtns.forEach(btn => {
   };
   const release = (e) => {
     e.preventDefault();
+    btn.classList.remove('active');
     const dir = btn.dataset.dir;
     if (dir === 'up') keys.w = false;
     if (dir === 'down') keys.s = false;
@@ -124,10 +126,19 @@ dpadBtns.forEach(btn => {
 const attackBtn = document.getElementById('mobileAttackBtn');
 const pressAttack = (e) => {
   e.preventDefault();
+  attackBtn.classList.add('active');
   attemptAttack();
 };
+const releaseAttack = (e) => {
+  e.preventDefault();
+  attackBtn.classList.remove('active');
+};
 attackBtn.addEventListener('touchstart', pressAttack, { passive: false });
+attackBtn.addEventListener('touchend', releaseAttack, { passive: false });
+attackBtn.addEventListener('touchcancel', releaseAttack, { passive: false });
 attackBtn.addEventListener('mousedown', pressAttack);
+attackBtn.addEventListener('mouseup', releaseAttack);
+attackBtn.addEventListener('mouseleave', releaseAttack);
 
 function resize() {
   canvas.width = window.innerWidth;
@@ -158,20 +169,120 @@ function initLoginParticles() {
 }
 initLoginParticles();
 
+// ─── Character Customization ───
+const availableClasses = ['knight', 'mage', 'archer', 'rogue'];
+const classNames = { knight: 'อัศวิน (Knight)', mage: 'นักเวท (Mage)', archer: 'นักธนู (Archer)', rogue: 'โจร (Rogue)' };
+let selectedClassIndex = 0;
+const availableColors = ['#f472b6', '#60a5fa', '#4ade80', '#facc15', '#c084fc', '#fb923c', '#2dd4bf', '#f87171'];
+let selectedColor = availableColors[0];
+let selectedGender = 'm';
+
+const charPreviewCanvas = document.getElementById('charPreviewCanvas');
+const miniCharPreviewCanvas = document.getElementById('miniCharPreviewCanvas');
+const characterModal = document.getElementById('characterModal');
+const openCharModalBtn = document.getElementById('openCharModalBtn');
+const closeCharModalBtn = document.getElementById('closeCharModalBtn');
+const confirmCharBtn = document.getElementById('confirmCharBtn');
+const charModalOverlay = document.getElementById('charModalOverlay');
+
+const prevClassBtn = document.getElementById('prevClassBtn');
+const nextClassBtn = document.getElementById('nextClassBtn');
+const genderMBtn = document.getElementById('genderMBtn');
+const genderFBtn = document.getElementById('genderFBtn');
+const charClassLabel = document.getElementById('charClassLabel');
+const colorPalette = document.getElementById('colorPalette');
+
+function updateCharPreview() {
+  const spriteType = availableClasses[selectedClassIndex];
+  if (charClassLabel) charClassLabel.textContent = classNames[spriteType];
+  
+  if (typeof renderPlayerSprite === 'function') {
+    if (charPreviewCanvas) {
+      const ctx = charPreviewCanvas.getContext('2d');
+      ctx.clearRect(0, 0, charPreviewCanvas.width, charPreviewCanvas.height);
+      // Canvas is 120x120, center is 60,60. Scale 5 => 120 draw size
+      renderPlayerSprite(ctx, { spriteType, gender: selectedGender, color: selectedColor, direction: 'down' }, 60, 60, 5);
+    }
+    if (miniCharPreviewCanvas) {
+      const ctxMini = miniCharPreviewCanvas.getContext('2d');
+      ctxMini.clearRect(0, 0, miniCharPreviewCanvas.width, miniCharPreviewCanvas.height);
+      // Canvas is 64x64, center is 32,32. Scale 2.5 => 60 draw size
+      renderPlayerSprite(ctxMini, { spriteType, gender: selectedGender, color: selectedColor, direction: 'down' }, 32, 32, 2.5);
+    }
+  }
+  
+  // Keep trying to update if image is not loaded yet
+  setTimeout(updateCharPreview, 150);
+}
+
+// Modal handling
+if (openCharModalBtn) openCharModalBtn.addEventListener('click', () => characterModal?.classList.remove('hidden'));
+[closeCharModalBtn, confirmCharBtn, charModalOverlay].forEach(btn => {
+  if (btn) btn.addEventListener('click', () => characterModal?.classList.add('hidden'));
+});
+
+if (prevClassBtn && nextClassBtn) {
+  prevClassBtn.addEventListener('click', () => {
+    selectedClassIndex = (selectedClassIndex - 1 + availableClasses.length) % availableClasses.length;
+    updateCharPreview();
+  });
+  nextClassBtn.addEventListener('click', () => {
+    selectedClassIndex = (selectedClassIndex + 1) % availableClasses.length;
+    updateCharPreview();
+  });
+  
+  if (genderMBtn && genderFBtn) {
+    genderMBtn.addEventListener('click', () => {
+      selectedGender = 'm';
+      genderMBtn.classList.add('active');
+      genderFBtn.classList.remove('active');
+      updateCharPreview();
+    });
+    genderFBtn.addEventListener('click', () => {
+      selectedGender = 'f';
+      genderFBtn.classList.add('active');
+      genderMBtn.classList.remove('active');
+      updateCharPreview();
+    });
+  }
+  
+  if (colorPalette) {
+    availableColors.forEach(color => {
+      const swatch = document.createElement('div');
+      swatch.className = 'color-swatch';
+      if (color === selectedColor) swatch.classList.add('selected');
+      swatch.style.backgroundColor = color;
+      swatch.addEventListener('click', () => {
+        document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+        swatch.classList.add('selected');
+        selectedColor = color;
+        updateCharPreview();
+      });
+      colorPalette.appendChild(swatch);
+    });
+  }
+  
+  // Wait a bit for sprites.js to load fully if needed, though it's synchronous
+  setTimeout(updateCharPreview, 100);
+}
+
 // ─── Socket Events ───
+
 
 createRoomBtn.addEventListener('click', () => {
   const name = loginInput.value.trim() || 'ผู้กล้า';
   const maxPlayers = maxPlayersInput.value;
   const duration = parseInt(document.getElementById('gameDuration').value) || 180;
-  socket.emit('createRoom', { name, maxPlayers, duration });
+  const spriteType = availableClasses[selectedClassIndex];
+  socket.emit('createRoom', { name, maxPlayers, duration, spriteType, color: selectedColor, gender: selectedGender });
 });
 
 joinRoomBtn.addEventListener('click', () => {
   const name = loginInput.value.trim() || 'ผู้กล้าไร้นาม';
   const code = roomCodeInput.value.trim();
   if(!code) return alert('กรุณาใส่รหัสห้อง!');
-  socket.emit('joinRoom', { name, code });
+  const spriteType = availableClasses[selectedClassIndex];
+  socket.emit('joinRoom', { name, code, spriteType, color: selectedColor, gender: selectedGender });
 });
 
 socket.on('errorMsg', (msg) => {
@@ -740,16 +851,16 @@ function drawPlayer(player) {
   ctx.ellipse(px, py + 15, 16, 8, 0, 0, Math.PI * 2);
   ctx.fill();
   
-  // Draw Pixel Art Sprite
-  const spriteType = (player.color === '#f472b6' || player.color === '#c084fc') ? 'mage' : 'knight';
-  const scale = 3; // 16x16 * 3 = 48x48
+  // Draw High-Res SVG Sprite
+  const spriteType = player.spriteType || ((player.color === '#f472b6' || player.color === '#c084fc') ? 'mage' : 'knight');
+  const scale = 3; 
   
   if (player.isDead) {
     ctx.globalAlpha = 0.5; // Make ghost-like
-    renderSprite(ctx, spriteType, px, py, scale, '#9e9e9e', player.direction); // Gray color
+    renderPlayerSprite(ctx, { ...player, color: '#9e9e9e', spriteType }, px, py, scale); // Gray color
     ctx.globalAlpha = 1.0;
   } else {
-    renderSprite(ctx, spriteType, px, py, scale, player.color, player.direction);
+    renderPlayerSprite(ctx, { ...player, spriteType }, px, py, scale);
   }
   
   // Name tag

@@ -233,7 +233,7 @@ function getPublicPlayers(room) {
   const pub = {};
   Object.keys(room.players).forEach(id => {
     const p = room.players[id];
-    pub[id] = { id, name: p.name, x: p.x, y: p.y, color: p.color, score: p.score, direction: p.direction, isAttacking: p.isAttacking, monstersKilled: p.monstersKilled, hp: p.hp, maxHp: p.maxHp, isDead: p.isDead };
+    pub[id] = { id, name: p.name, x: p.x, y: p.y, color: p.color, spriteType: p.spriteType, gender: p.gender, score: p.score, direction: p.direction, isAttacking: p.isAttacking, monstersKilled: p.monstersKilled, hp: p.hp, maxHp: p.maxHp, isDead: p.isDead };
   });
   return pub;
 }
@@ -260,7 +260,7 @@ io.on('connection', (socket) => {
       duration: data.duration ? parseInt(data.duration) : GAME_DURATION
     };
     
-    joinRoomLogic(socket, code, data.name);
+    joinRoomLogic(socket, code, data.name, data.spriteType, data.color, data.gender);
   });
 
   socket.on('joinRoom', (data) => {
@@ -269,10 +269,10 @@ io.on('connection', (socket) => {
     if (rooms[code].gameActive) return socket.emit('errorMsg', 'ห้องนี้เริ่มเกมไปแล้ว!');
     if (Object.keys(rooms[code].players).length >= rooms[code].maxPlayers) return socket.emit('errorMsg', 'ห้องเต็มแล้ว!');
     
-    joinRoomLogic(socket, code, data.name);
+    joinRoomLogic(socket, code, data.name, data.spriteType, data.color, data.gender);
   });
 
-  function joinRoomLogic(socket, code, playerName) {
+  function joinRoomLogic(socket, code, playerName, spriteType, color, gender) {
     const room = rooms[code];
     currentRoom = code;
     socket.join(code);
@@ -283,7 +283,9 @@ io.on('connection', (socket) => {
       id: socket.id,
       name: playerName || 'ผู้กล้า',
       x: 0, y: 0, // Assigned later
-      color: PLAYER_COLORS[colorIndex],
+      color: color || PLAYER_COLORS[colorIndex],
+      spriteType: spriteType || 'knight',
+      gender: gender || 'm',
       hp: 100, maxHp: 100, isDead: false,
       score: 0, monstersKilled: 0, correctAnswers: 0,
       direction: 'down', isAttacking: false, pendingQuestion: null,
@@ -295,14 +297,14 @@ io.on('connection', (socket) => {
       roomCode: code,
       maxPlayers: room.maxPlayers,
       currentPlayers: currentCount,
-      players: Object.values(room.players).map(p => ({ id: p.id, name: p.name, color: p.color }))
+      players: Object.values(room.players).map(p => ({ id: p.id, name: p.name, color: p.color, spriteType: p.spriteType, gender: p.gender }))
     });
 
     socket.to(code).emit('lobbyUpdate', {
       currentPlayers: currentCount,
       maxPlayers: room.maxPlayers,
       players: Object.values(room.players).map(p => ({ 
-        id: p.id, name: p.name, color: p.color,
+        id: p.id, name: p.name, color: p.color, spriteType: p.spriteType, gender: p.gender,
         ready: room.readyVotes.has(p.id)
       }))
     });
@@ -403,7 +405,7 @@ io.on('connection', (socket) => {
             currentPlayers: currentCount,
             maxPlayers: room.maxPlayers,
             players: Object.values(room.players).map(p => ({ 
-              id: p.id, name: p.name, color: p.color,
+              id: p.id, name: p.name, color: p.color, spriteType: p.spriteType, gender: p.gender,
               ready: room.readyVotes ? room.readyVotes.has(p.id) : false
             }))
           });
@@ -478,7 +480,7 @@ io.on('connection', (socket) => {
       currentPlayers: currentCount,
       maxPlayers: room.maxPlayers,
       players: Object.values(room.players).map(p => ({ 
-        id: p.id, name: p.name, color: p.color, 
+        id: p.id, name: p.name, color: p.color, spriteType: p.spriteType, gender: p.gender,
         ready: room.readyVotes.has(p.id) 
       }))
     });
@@ -507,7 +509,7 @@ io.on('connection', (socket) => {
             currentPlayers: currentCount,
             maxPlayers: room.maxPlayers,
             players: Object.values(room.players).map(p => ({ 
-              id: p.id, name: p.name, color: p.color,
+              id: p.id, name: p.name, color: p.color, spriteType: p.spriteType, gender: p.gender,
               ready: room.readyVotes ? room.readyVotes.has(p.id) : false
             }))
           });
