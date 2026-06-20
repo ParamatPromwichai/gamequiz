@@ -266,7 +266,28 @@ if (prevClassBtn && nextClassBtn) {
   setTimeout(updateCharPreview, 100);
 }
 
+// ─── Session & Auto-Reconnect ───
+let sessionId = sessionStorage.getItem('sessionId');
+if (!sessionId) {
+  sessionId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+  sessionStorage.setItem('sessionId', sessionId);
+}
+
+const savedRoom = sessionStorage.getItem('roomCode');
+if (savedRoom) {
+  // Hide login screen while attempting to reconnect
+  document.getElementById('loginScreen').classList.remove('active');
+  socket.emit('reconnectRoom', { code: savedRoom, sessionId });
+}
+
+socket.on('reconnectFailed', () => {
+  sessionStorage.removeItem('roomCode');
+  alert('หมดเวลาหรือไม่สามารถเชื่อมต่อกลับไปที่ห้องเดิมได้');
+  document.getElementById('loginScreen').classList.add('active');
+});
+
 // ─── Socket Events ───
+
 
 
 createRoomBtn.addEventListener('click', () => {
@@ -274,7 +295,7 @@ createRoomBtn.addEventListener('click', () => {
   const maxPlayers = maxPlayersInput.value;
   const duration = parseInt(document.getElementById('gameDuration').value) || 180;
   const spriteType = availableClasses[selectedClassIndex];
-  socket.emit('createRoom', { name, maxPlayers, duration, spriteType, color: selectedColor, gender: selectedGender });
+  socket.emit('createRoom', { name, maxPlayers, duration, spriteType, color: selectedColor, gender: selectedGender, sessionId });
 });
 
 joinRoomBtn.addEventListener('click', () => {
@@ -282,7 +303,7 @@ joinRoomBtn.addEventListener('click', () => {
   const code = roomCodeInput.value.trim();
   if(!code) return alert('กรุณาใส่รหัสห้อง!');
   const spriteType = availableClasses[selectedClassIndex];
-  socket.emit('joinRoom', { name, code, spriteType, color: selectedColor, gender: selectedGender });
+  socket.emit('joinRoom', { name, code, spriteType, color: selectedColor, gender: selectedGender, sessionId });
 });
 
 socket.on('errorMsg', (msg) => {
@@ -291,6 +312,7 @@ socket.on('errorMsg', (msg) => {
 
 [leaveLobbyBtn, leaveGameBtn, leaveGameOverBtn].forEach(btn => {
   if (btn) btn.addEventListener('click', () => {
+    sessionStorage.removeItem('roomCode');
     socket.emit('leaveRoom');
     window.location.reload();
   });
@@ -317,8 +339,10 @@ socket.on('gamePaused', (data) => {
 });
 
 socket.on('joinedLobby', (data) => {
+  sessionStorage.setItem('roomCode', data.roomCode); // Save for reconnect
   screens.login.classList.remove('active');
   screens.lobby.classList.add('active');
+  screens.game.classList.remove('active');
   
   gameState.myId = socket.id;
   document.getElementById('lobbyRoomCode').textContent = data.roomCode;
@@ -363,6 +387,7 @@ socket.on('lobbyCountdown', (sec) => {
 socket.on('gameStarted', (data) => {
   if (typeof AudioManager !== 'undefined') AudioManager.playBGM('battle');
   screens.lobby.classList.remove('active');
+  screens.login.classList.remove('active');
   screens.game.classList.add('active');
   
   gameState.mapWidth = data.mapWidth;
@@ -370,14 +395,33 @@ socket.on('gameStarted', (data) => {
   gameState.monsters = data.monsters;
   gameState.players = data.players;
   gameState.active = true;
-  scoreEl.textContent = '0';
-  hpValueEl.textContent = '100';
-  hpFillEl.style.width = '100%';
-  updateLeaderboard();
-  goModal.classList.add('hidden');
-  youDiedModal.classList.add('hidden');
-  qModal.classList.add('hidden');
+  gameState.myId = socket.id; // ensure myId is set in case of reconnect
   
+  if (data.reconnected) {
+    const me = gameState.players[socket.id];
+    if (me) {
+      scoreEl.textContent = me.score;
+      hpValueEl.textContent = me.hp;
+      hpFillEl.style.width = `${(me.hp / me.maxHp) * 100}%`;
+      if (me.isDead) youDiedModal.classList.remove('hidden');
+    }
+  } else {
+    scoreEl.textContent = '0';
+    hpValueEl.textContent = '100';
+    hpFillEl.style.width = '100%';
+    goModal.classList.add('hidden');
+    youDiedModal.classList.add('hidden');
+    qModal.classList.add('hidden');
+  }
+  if (data.timeRemaining !== undefined) {
+    const mins = Math.floor(data.timeRemaining / 60);
+    const secs = data.timeRemaining % 60;
+    timeEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    const pct = (data.timeRemaining / data.totalTime) * 100;
+    timerFill.style.width = `${pct}%`;
+  }
+  
+  updateLeaderboard();
   requestAnimationFrame(gameLoop);
 });
 
@@ -521,7 +565,11 @@ socket.on('showQuestion', (data) => {
   
   if (data.isLastBoss) {
     qMonsterBadge.textContent = '👹';
-    qTitle.textContent = 'คำถามจากจอมมาร!';
+    let title = 'คำถามจากจอมมาร!';
+    if (data.bossTotal > 1) {
+       title = `คำถามจากจอมมาร! (${data.bossCurrent}/${data.bossTotal})`;
+    }
+    qTitle.textContent = title;
     qTitle.style.color = '#ef4444';
   } else {
     qMonsterBadge.textContent = '🐉';
@@ -547,28 +595,57 @@ function submitAnswer(index, btnElement) {
   const btns = qChoices.querySelectorAll('.choice-btn');
   btns.forEach(b => b.classList.add('disabled'));
   
+  gameState.lastAnsweredIndex = index;
   socket.emit('answerQuestion', { answer: index });
-  
-  socket.once('answerResult', (result) => {
-    qResult.classList.remove('hidden');
-    qResult.className = `question-result ${result.correct ? 'correct-result' : 'wrong-result'}`;
-    
-    if (result.correct) {
-      if (typeof AudioManager !== 'undefined') AudioManager.playSFX('correct');
-      btnElement.classList.add('correct');
-      qResult.innerHTML = `<strong>✅ ถูกต้อง!</strong> รับไปเลย ${result.points} คะแนน<br><small>${result.explanation}</small>`;
-    } else {
-      if (typeof AudioManager !== 'undefined') AudioManager.playSFX('wrong');
-      btnElement.classList.add('wrong');
-      btns[result.correctAnswer].classList.add('correct');
-      qResult.innerHTML = `<strong>❌ ผิด!</strong> ไม่ได้รับคะแนน<br><small>${result.explanation}</small>`;
-    }
-    
-    setTimeout(() => {
-      qModal.classList.add('hidden');
-    }, 4000);
-  });
 }
+
+socket.on('bossIntermediateResult', (result) => {
+  qResult.classList.remove('hidden');
+  qResult.className = `question-result ${result.correct ? 'correct-result' : 'wrong-result'}`;
+  
+  const btns = qChoices.querySelectorAll('.choice-btn');
+  const btnElement = btns[gameState.lastAnsweredIndex];
+  
+  if (result.correct) {
+    if (typeof AudioManager !== 'undefined') AudioManager.playSFX('correct');
+    if (btnElement) btnElement.classList.add('correct');
+    qResult.innerHTML = `<strong>✅ ถูกต้อง!</strong><br><small>${result.explanation}</small><br><i>เตรียมตัวรับคำถามต่อไป...</i>`;
+  } else {
+    if (typeof AudioManager !== 'undefined') AudioManager.playSFX('wrong');
+    if (btnElement) btnElement.classList.add('wrong');
+    if (btns[result.correctAnswer]) btns[result.correctAnswer].classList.add('correct');
+    qResult.innerHTML = `<strong>❌ ผิด!</strong><br><small>${result.explanation}</small><br><i>เตรียมตัวรับคำถามต่อไป...</i>`;
+  }
+});
+
+socket.on('answerResult', (result) => {
+  qResult.classList.remove('hidden');
+  qResult.className = `question-result ${result.correct || (result.bossFinal && result.bossCorrectCount > 0) ? 'correct-result' : 'wrong-result'}`;
+  
+  const btns = qChoices.querySelectorAll('.choice-btn');
+  const btnElement = btns[gameState.lastAnsweredIndex];
+
+  if (result.correct) {
+    if (typeof AudioManager !== 'undefined') AudioManager.playSFX('correct');
+    if (btnElement) btnElement.classList.add('correct');
+  } else {
+    if (typeof AudioManager !== 'undefined') AudioManager.playSFX('wrong');
+    if (btnElement) btnElement.classList.add('wrong');
+    if (result.correctAnswer !== undefined && btns[result.correctAnswer]) btns[result.correctAnswer].classList.add('correct');
+  }
+  
+  if (result.bossFinal) {
+    qResult.innerHTML = `<strong>${result.bossCorrectCount === 3 ? '✅ สุดยอด!' : (result.bossCorrectCount > 0 ? '⚠️ จบการต่อสู้' : '❌ พ่ายแพ้!')}</strong><br>ตอบถูก ${result.bossCorrectCount} ข้อ รับ ${result.points} คะแนน | เสียเลือด ${result.bossDamage} HP<br><small>${result.explanation}</small>`;
+  } else if (result.correct) {
+    qResult.innerHTML = `<strong>✅ ถูกต้อง!</strong> รับไปเลย ${result.points} คะแนน<br><small>${result.explanation}</small>`;
+  } else {
+    qResult.innerHTML = `<strong>❌ ผิด!</strong> ไม่ได้รับคะแนน<br><small>${result.explanation}</small>`;
+  }
+  
+  setTimeout(() => {
+    qModal.classList.add('hidden');
+  }, 4000);
+});
 
 // ─── Game Over ───
 socket.on('gameEnded', (data) => {
@@ -845,14 +922,31 @@ function drawPlayer(player) {
   const px = player.x - gameState.camera.x;
   const py = player.y - gameState.camera.y;
   
-  // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  ctx.beginPath();
-  ctx.ellipse(px, py + 15, 16, 8, 0, 0, Math.PI * 2);
-  ctx.fill();
-  
   // Draw High-Res SVG Sprite
   const spriteType = player.spriteType || ((player.color === '#f472b6' || player.color === '#c084fc') ? 'mage' : 'knight');
+  const spriteKey = `${spriteType}_${player.gender || 'm'}`;
+  
+  // Dynamically calculate shadow offset to fit the feet perfectly
+  let shadowOffset = 38;
+  if (typeof PLAYER_SPRITES !== 'undefined' && PLAYER_SPRITES[spriteKey]) {
+    const sprite = PLAYER_SPRITES[spriteKey];
+    let lowestRow = 23;
+    for (let r = 23; r >= 0; r--) {
+      if (sprite[r] && sprite[r].replace(/\./g, '').length > 0) {
+        lowestRow = r;
+        break;
+      }
+    }
+    // pixelSize = 3, size = 24
+    shadowOffset = -36 + (lowestRow + 1) * 3 - 2; 
+  }
+  
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.beginPath();
+  ctx.ellipse(px, py + shadowOffset, 24, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
   const scale = 3; 
   
   if (player.isDead) {
@@ -902,6 +996,12 @@ const MONSTER_SPRITE_MAP = {
   'หมาป่า': 'wolf',
   'โกเลม': 'golem',
   'มังกรน้อย': 'dragon',
+  'เห็ดพิษ': 'mushroom',
+  'แมงมุมยักษ์': 'spider',
+  'โครงกระดูก': 'skeleton',
+  'กอบลิน': 'goblin',
+  'อัศวินทมิฬ (มือขวาจอมมาร)': 'miniboss_right',
+  'นักเวทย์ทมิฬ (มือซ้ายจอมมาร)': 'miniboss_left',
   '⚡ จอมมารแห่งความรู้ ⚡': 'boss'
 };
 
@@ -912,10 +1012,28 @@ function drawMonster(monster) {
   const mx = monster.x - gameState.camera.x;
   const my = monster.y - gameState.camera.y;
   
+  const spriteType = MONSTER_SPRITE_MAP[monster.name] || 'slime';
+  const scale = monster.isLastBoss ? 6 : (monster.size / 10);
+  
+  // Dynamically calculate shadow offset
+  let shadowOffset = monster.size / 2;
+  if (!monster.isLastBoss && typeof SPRITES !== 'undefined' && SPRITES[spriteType]) {
+    const sprite = SPRITES[spriteType];
+    const size = sprite.length;
+    let lowestRow = size - 1;
+    for (let r = size - 1; r >= 0; r--) {
+      if (sprite[r] && sprite[r].replace(/\./g, '').length > 0) {
+        lowestRow = r;
+        break;
+      }
+    }
+    shadowOffset = -(size * scale) / 2 + (lowestRow + 1) * scale - 2;
+  }
+  
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.beginPath();
-  ctx.ellipse(mx, my + monster.size/2, monster.size/1.5, monster.size/3, 0, 0, Math.PI * 2);
+  ctx.ellipse(mx, my + shadowOffset, monster.size/1.5, monster.size/3, 0, 0, Math.PI * 2);
   ctx.fill();
   
   // Draw Boss or Pixel Art Sprite
@@ -926,8 +1044,6 @@ function drawMonster(monster) {
     const imgH = 200;
     ctx.drawImage(bossImg, mx - imgW/2, my + monster.size/2 - imgH + bob, imgW, imgH);
   } else {
-    const spriteType = MONSTER_SPRITE_MAP[monster.name] || 'slime';
-    const scale = monster.isLastBoss ? 6 : (monster.size / 10);
     renderSprite(ctx, spriteType, mx, my + bob, scale, monster.color, 'down');
   }
   
@@ -948,9 +1064,13 @@ function drawMonster(monster) {
   ctx.font = 'bold 14px "Mali"';
   ctx.textAlign = 'center';
   ctx.lineWidth = 2;
-  ctx.strokeStyle = 'black';
+  
+  const isDarkColor = ['#1a1412', '#4c1d95', '#b91c1c', '#1e293b'].includes(monster.color);
+  
+  ctx.strokeStyle = isDarkColor ? 'rgba(255,255,255,0.5)' : 'black';
   ctx.strokeText(monster.name, mx, my - monster.size/2 - 32);
-  ctx.fillStyle = monster.color;
+  
+  ctx.fillStyle = isDarkColor ? 'white' : monster.color;
   ctx.fillText(monster.name, mx, my - monster.size/2 - 32);
 }
 

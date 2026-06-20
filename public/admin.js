@@ -60,17 +60,29 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    questions.forEach((q, index) => {
+    const mappedQuestions = questions.map((q, index) => ({ q, index }));
+    const diffWeight = { 'easy': 1, 'medium': 2, 'hard': 3, 'boss': 4 };
+    mappedQuestions.sort((a, b) => {
+      const wA = diffWeight[a.q.difficulty || 'easy'] || 1;
+      const wB = diffWeight[b.q.difficulty || 'easy'] || 1;
+      if (wA !== wB) return wA - wB;
+      return 0;
+    });
+
+    mappedQuestions.forEach(({q, index}) => {
       const el = document.createElement('div');
       el.className = 'q-item';
       
       const correctText = q.choices[q.correctAnswer] || 'ไม่มีเฉลย';
       
-      const diffMap = { 'easy': '🟢 ง่าย', 'medium': '🗿 ปานกลาง', 'hard': '🐉 ยาก', 'boss': '👹 บอส' };
-      const diffBadge = diffMap[q.difficulty || 'easy'];
+      const diffMap = { 'easy': '🟢 ง่าย', 'medium': '🗿 ปานกลาง', 'hard': '🐉 ยาก', 'boss': '👹 บอสใหญ่' };
+      const diffBadge = diffMap[q.difficulty] || diffMap['easy'];
       
       el.innerHTML = `
-        <div class="q-title"><span style="font-size:12px; background:#f4e8c1; border:1px solid #b8860b; padding:2px 6px; border-radius:10px; margin-right:8px;">${diffBadge}</span> ${index + 1}. ${q.question}</div>
+        <div class="q-title">
+          <span style="font-size:12px; background:#f4e8c1; border:1px solid #b8860b; padding:2px 6px; border-radius:10px; margin-right:8px;">${diffBadge}</span>
+          ${index + 1}. ${q.question}
+        </div>
         <div class="q-desc">
           <strong>เฉลย:</strong> ${correctText} <br>
           <small style="color: #666;">${q.explanation ? 'อธิบาย: ' + q.explanation : ''}</small>
