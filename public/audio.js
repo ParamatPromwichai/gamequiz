@@ -6,7 +6,7 @@ const AudioManager = {
   // High-quality royalty-free background music tracks
   bgmTracks: {
     lobby: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3', // Relaxed & Ambient
-    battle: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3', // Upbeat & Driving
+    battle: '/battle.mp3', // Battlefield music (Loaded locally to bypass block)
     boss: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-16.mp3'    // Intense & Epic
   },
 
@@ -21,18 +21,18 @@ const AudioManager = {
     wrong: 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/audio/SoundEffects/blaster.mp3',
     gameover: 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/audio/SoundEffects/p-ping.mp3'
   },
-  
+
   sfxAudio: {},
   lastSfxTime: {},
 
   init() {
     this.bgmAudio.loop = true;
     this.bgmAudio.volume = 0.3; // Default volume
-    
+
     // Preload SFX into Audio objects for low-latency playback
     for (const [key, url] of Object.entries(this.sfxFiles)) {
       this.sfxAudio[key] = new Audio(url);
-      
+
       // Adjust volumes for realism
       if (key === 'attack') this.sfxAudio[key].volume = 0.5;
       else if (key === 'hit') this.sfxAudio[key].volume = 0.4;
@@ -51,9 +51,13 @@ const AudioManager = {
   playBGM(trackName) {
     if (this.currentBGMTrack === trackName) return;
     this.currentBGMTrack = trackName;
-    
+
     if (this.bgmTracks[trackName]) {
       this.bgmAudio.src = this.bgmTracks[trackName];
+
+      // ลดเสียง BGM ลงครึ่งหนึ่งถ้าเป็นฉากต่อสู้ เพื่อไม่ให้กลบเสียง Effect
+      this.bgmAudio.volume = trackName === 'battle' ? 0.15 : 0.3;
+
       if (!this.muted) {
         this.bgmAudio.play().catch(e => console.log('BGM playback prevented by browser:', e));
       }
@@ -62,7 +66,7 @@ const AudioManager = {
 
   playSFX(effect) {
     if (this.muted) return;
-    
+
     // Throttle spammy sounds
     if (effect === 'attack' || effect === 'hit') {
       const now = Date.now();
