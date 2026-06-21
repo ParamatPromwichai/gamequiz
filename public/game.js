@@ -330,6 +330,32 @@ socket.on('errorMsg', (msg) => {
   });
 });
 
+const add1BotBtn = document.getElementById('add1BotBtn');
+const add5BotsBtn = document.getElementById('add5BotsBtn');
+const remove1BotBtn = document.getElementById('remove1BotBtn');
+const removeAllBotsBtn = document.getElementById('removeAllBotsBtn');
+
+if (add1BotBtn) {
+  add1BotBtn.addEventListener('click', () => {
+    socket.emit('addBots', { count: 1 });
+  });
+}
+if (add5BotsBtn) {
+  add5BotsBtn.addEventListener('click', () => {
+    socket.emit('addBots', { count: 5 });
+  });
+}
+if (remove1BotBtn) {
+  remove1BotBtn.addEventListener('click', () => {
+    socket.emit('removeBots', { count: 1 });
+  });
+}
+if (removeAllBotsBtn) {
+  removeAllBotsBtn.addEventListener('click', () => {
+    socket.emit('removeBots', { count: 'all' });
+  });
+}
+
 if (pauseBtn) {
   pauseBtn.addEventListener('click', () => {
     socket.emit('togglePause');
@@ -485,42 +511,22 @@ socket.on('lastBossSpawned', (boss) => {
   setTimeout(() => document.body.style.animation = '', 500);
 });
 
-socket.on('playerAttack', (data) => {
-  if (data.playerId === gameState.myId) return; // Ignore own attacks (already predicted locally)
-  
-  if (gameState.players[data.playerId]) {
-    gameState.players[data.playerId].isAttacking = true;
-    setTimeout(() => {
-      if (gameState.players[data.playerId]) {
-        gameState.players[data.playerId].isAttacking = false;
-      }
-    }, 200);
-    
-    // Attack visual effect
-    const p = gameState.players[data.playerId];
-    createAttackEffect(p.x, p.y, p.direction);
-  }
-});
-
-socket.on('monsterDamaged', (data) => {
-  if (data.attackerId === gameState.myId) {
-    // Only update HP sync from server, ignore visuals since we already predicted them
-    if (gameState.monsters[data.monsterId]) {
-      gameState.monsters[data.monsterId].currentHp = data.currentHp;
-    }
-    return;
-  }
-  
+socket.on('monsterDamagedBatch', (data) => {
   if (gameState.monsters[data.monsterId]) {
     const m = gameState.monsters[data.monsterId];
     m.currentHp = data.currentHp;
-    createDamageText(m.x, m.y, data.damage);
+    
+    // Scale text size and color based on batched damage
+    createDamageText(m.x, m.y, data.damage, true);
+    createMeleeDustEffect(m.x, m.y);
     
     // Play sound based on distance
     if (typeof AudioManager !== 'undefined') {
       const vol = calculateVolume(m.x, m.y);
       if (vol > 0) {
         AudioManager.playSFX('hit', vol);
+        // Play attack sound periodically to simulate the chaos
+        if (Math.random() > 0.5) AudioManager.playSFX('attack', vol * 0.5); 
       }
     }
   }
@@ -1213,7 +1219,7 @@ function updateAndDrawFloatingTexts() {
     
     ctx.globalAlpha = t.life / t.maxLife;
     ctx.fillStyle = t.color;
-    ctx.font = 'bold 20px "Outfit"';
+    ctx.font = t.isBatched ? 'bold 28px "Outfit"' : 'bold 20px "Outfit"';
     ctx.textAlign = 'center';
     ctx.fillText(t.text, px, py);
     ctx.globalAlpha = 1;
@@ -1364,18 +1370,40 @@ function createDeathEffect(x, y, color) {
   }
 }
 
-function createDamageText(x, y, amount) {
+function createDamageText(x, y, amount, isBatched = false) {
   if (!isVisible(x, y)) return;
-  if (gameState.floatingTexts.length > 10) return; // ลิมิตตัวเลขดาเมจเพื่อไม่ให้กระตุก
+  if (gameState.floatingTexts.length > 20) return;
 
   gameState.floatingTexts.push({
     x: x + (Math.random() - 0.5) * 20,
-    y: y - 20,
+    y: y - (isBatched ? 30 : 20),
     text: `-${amount}`,
-    color: '#ef4444',
+    color: isBatched && amount > 20 ? '#facc15' : '#ef4444',
+    isBatched: isBatched && amount > 20,
     life: 40,
     maxLife: 40
   });
+}
+
+function createMeleeDustEffect(x, y) {
+  if (!isVisible(x, y)) return;
+  if (gameState.particles.length > 50) return; // Allow slightly more for moshpit
+
+  // Create star/dust sparks representing a chaotic melee fight
+  for (let i = 0; i < 5; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = Math.random() * 4 + 1;
+    gameState.particles.push({
+      x: x + (Math.random() - 0.5) * 30,
+      y: y + (Math.random() - 0.5) * 30,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 10 + Math.random() * 10,
+      maxLife: 20,
+      size: Math.random() * 3 + 2,
+      color: Math.random() > 0.5 ? '#facc15' : '#ffffff' // Yellow and white sparks
+    });
+  }
 }
 
 let currentFps = 60;

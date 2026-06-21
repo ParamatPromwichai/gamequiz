@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
+const { spawnBots, removeBots } = require('./stress-test.js');
 
 const app = express();
 const server = http.createServer(app);
@@ -72,18 +73,18 @@ const PLAYER_ATTACK_DAMAGE = 10;
 const ATTACK_RANGE = 60;
 
 const MONSTER_TYPES = [
-  { name: 'สไลม์', emoji: '🟢', hp: 30, color: '#4ade80', size: 36, xp: 10, difficulty: 'easy' },
-  { name: 'ค้างคาว', emoji: '🦇', hp: 40, color: '#a78bfa', size: 32, xp: 15, difficulty: 'easy' },
-  { name: 'เห็ดพิษ', emoji: '🍄', hp: 45, color: '#f43f5e', size: 36, xp: 15, difficulty: 'easy' },
-  { name: 'แมงมุมยักษ์', emoji: '🕷️', hp: 55, color: '#1e293b', size: 38, xp: 20, difficulty: 'medium' },
-  { name: 'หมาป่า', emoji: '🐺', hp: 60, color: '#94a3b8', size: 40, xp: 25, difficulty: 'medium' },
-  { name: 'โครงกระดูก', emoji: '💀', hp: 65, color: '#e2e8f0', size: 42, xp: 30, difficulty: 'medium' },
-  { name: 'โกเลม', emoji: '🗿', hp: 80, color: '#f59e0b', size: 48, xp: 35, difficulty: 'hard' },
-  { name: 'กอบลิน', emoji: '👺', hp: 85, color: '#10b981', size: 40, xp: 40, difficulty: 'hard' },
-  { name: 'มังกรน้อย', emoji: '🐉', hp: 100, color: '#ef4444', size: 44, xp: 50, difficulty: 'hard' },
+  { name: 'สไลม์', emoji: '🟢', hp: 10, color: '#4ade80', size: 36, xp: 10, difficulty: 'easy' },
+  { name: 'ค้างคาว', emoji: '🦇', hp: 10, color: '#a78bfa', size: 32, xp: 15, difficulty: 'easy' },
+  { name: 'เห็ดพิษ', emoji: '🍄', hp: 20, color: '#f43f5e', size: 36, xp: 15, difficulty: 'easy' },
+  { name: 'แมงมุมยักษ์', emoji: '🕷️', hp: 20, color: '#1e293b', size: 38, xp: 20, difficulty: 'medium' },
+  { name: 'หมาป่า', emoji: '🐺', hp: 20, color: '#94a3b8', size: 40, xp: 25, difficulty: 'medium' },
+  { name: 'โครงกระดูก', emoji: '💀', hp: 30, color: '#e2e8f0', size: 42, xp: 30, difficulty: 'medium' },
+  { name: 'โกเลม', emoji: '🗿', hp: 30, color: '#f59e0b', size: 48, xp: 35, difficulty: 'hard' },
+  { name: 'กอบลิน', emoji: '👺', hp: 30, color: '#10b981', size: 40, xp: 40, difficulty: 'hard' },
+  { name: 'มังกรน้อย', emoji: '🐉', hp: 40, color: '#ef4444', size: 44, xp: 50, difficulty: 'hard' },
 ];
 const LAST_BOSS_TEMPLATE = {
-  name: '⚡ จอมมารแห่งความรู้ ⚡', emoji: '👹', hp: 300, color: '#dc2626', size: 72, xp: 200, isLastBoss: true, difficulty: 'boss'
+  name: '⚡ จอมมารแห่งความรู้ ⚡', emoji: '👹', hp: 100, color: '#dc2626', size: 72, xp: 200, isLastBoss: true, difficulty: 'boss'
 };
 const PLAYER_COLORS = ['#f472b6', '#60a5fa', '#4ade80', '#facc15', '#c084fc', '#fb923c', '#2dd4bf', '#f87171'];
 
@@ -204,7 +205,7 @@ function startRoomGame(roomCode) {
     room.timeRemaining--;
     if (room.timeRemaining === 90 && !room.leftHandSpawned) {
       room.leftHandSpawned = true;
-      const mbHp = 200 + (room.maxPlayers * 50);
+      const mbHp = 50 + (room.maxPlayers * 10);
       const leftHand = {
         id: `miniboss_left_${Date.now()}`,
         name: 'นักเวทย์ทมิฬ (มือซ้ายจอมมาร)',
@@ -227,7 +228,7 @@ function startRoomGame(roomCode) {
 
     if (room.timeRemaining === 60 && !room.rightHandSpawned) {
       room.rightHandSpawned = true;
-      const mbHp = 200 + (room.maxPlayers * 50);
+      const mbHp = 50 + (room.maxPlayers * 10);
       const rightHand = {
         id: `miniboss_right_${Date.now()}`,
         name: 'อัศวินทมิฬ (มือขวาจอมมาร)',
@@ -250,7 +251,7 @@ function startRoomGame(roomCode) {
     if (room.timeRemaining === LAST_BOSS_TIME && !room.lastBossSpawned) {
       room.lastBossSpawned = true;
       const id = 'boss_final';
-      const bossHp = 300 + (room.maxPlayers * 150);
+      const bossHp = 100 + (room.maxPlayers * 20);
       room.monsters[id] = { id, ...LAST_BOSS_TEMPLATE, currentHp: bossHp, hp: bossHp, x: room.mapWidth/2, y: room.mapHeight/2, spawnTime: Date.now(), attackedBy: {} };
       io.to(room.code).emit('lastBossSpawned', room.monsters[id]);
       io.to(room.code).emit('announcement', { text: '⚡ จอมมารแห่งความรู้ปรากฏตัว! ⚡', type: 'boss' });
@@ -327,6 +328,27 @@ io.on('connection', (socket) => {
     if (Object.keys(rooms[code].players).length >= rooms[code].maxPlayers) return socket.emit('errorMsg', 'ห้องเต็มแล้ว!');
     
     joinRoomLogic(socket, code, data.name, data.spriteType, data.color, data.gender, data.sessionId);
+  });
+
+  socket.on('addBots', (data) => {
+    if (!currentRoom || !rooms[currentRoom]) return;
+    const room = rooms[currentRoom];
+    if (room.gameActive) return socket.emit('errorMsg', 'ห้องนี้เริ่มเกมไปแล้ว ไม่สามารถเพิ่มบอทได้');
+    
+    const currentCount = Object.keys(room.players).length;
+    const toAdd = Math.min(data.count, room.maxPlayers - currentCount);
+    
+    if (toAdd <= 0) {
+      return socket.emit('errorMsg', 'ห้องเต็มแล้ว ไม่สามารถเพิ่มบอทได้');
+    }
+    
+    const port = process.env.PORT || 3000;
+    spawnBots(currentRoom, toAdd, `http://localhost:${port}`);
+  });
+
+  socket.on('removeBots', (data) => {
+    if (!currentRoom || !rooms[currentRoom]) return;
+    removeBots(currentRoom, data.count);
   });
 
   function joinRoomLogic(socket, code, playerName, spriteType, color, gender, sessionId) {
@@ -737,7 +759,7 @@ io.on('connection', (socket) => {
            io.to(currentRoom).emit('gamePaused', { isPaused: true });
         }
         
-        player.disconnectTimeout = setTimeout(() => {
+        const handleDisconnect = () => {
           if (!rooms[currentRoom] || !rooms[currentRoom].players[socket.id]) return;
           const pName = player.name;
           delete room.players[socket.id];
@@ -769,7 +791,13 @@ io.on('connection', (socket) => {
             if(room.monsterSpawner) clearInterval(room.monsterSpawner);
             delete rooms[currentRoom];
           }
-        }, 30000); // 30 seconds
+        };
+
+        if (player.name.startsWith('Bot_')) {
+          handleDisconnect();
+        } else {
+          player.disconnectTimeout = setTimeout(handleDisconnect, 30000); // 30 seconds
+        }
       }
     }
   });

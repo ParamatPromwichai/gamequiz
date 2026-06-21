@@ -1,18 +1,18 @@
 const { io } = require("socket.io-client");
 
-const SERVER_URL = "http://localhost:3000"; 
-// const SERVER_URL = "https://gamekubol.onrender.com"; 
-const NUM_BOTS = 5;
-const TARGET_ROOM_CODE = "2F5S"; // <--- เปลี่ยนเป็นเลขห้องที่คุณสร้างไว้ (ตัวพิมพ์ใหญ่)
+// const SERVER_URL = "http://localhost:3000"; 
+const SERVER_URL = "https://gamekubol.onrender.com"; 
+const NUM_BOTS = 50;
+const TARGET_ROOM_CODE = "GINU"; // <--- เปลี่ยนเป็นเลขห้องที่คุณสร้างไว้ (ตัวพิมพ์ใหญ่)
 
 const bots = [];
 let questionBank = {};
 
 // โหลดคำถามจาก API ก่อนเพื่อให้บอทตอบคำถามได้แบบฉลาดๆ
-async function initBots() {
+async function spawnBots(targetRoomCode, numBots, serverUrl = "http://localhost:3000") {
     console.log("กำลังโหลดข้อมูลคำถามให้บอท...");
     try {
-        const res = await fetch(SERVER_URL + '/api/questions', {
+        const res = await fetch(serverUrl + '/api/questions', {
             headers: { 'x-admin-password': '1234' }
         });
         const data = await res.json();
@@ -24,24 +24,25 @@ async function initBots() {
         console.log("โหลดคำถามไม่สำเร็จ บอทจะเดาสุ่มเอา (Error:", err.message, ")");
     }
 
-    console.log(`กำลังส่งบอท ${NUM_BOTS} ตัว ไปยังห้อง ${TARGET_ROOM_CODE} ...`);
+    console.log(`กำลังส่งบอท ${numBots} ตัว ไปยังห้อง ${targetRoomCode} ...`);
 
-    for (let i = 0; i < NUM_BOTS; i++) {
+    for (let i = 0; i < numBots; i++) {
         setTimeout(() => {
-            const bot = io(SERVER_URL);
+            const bot = io(serverUrl);
+            bot.roomCode = targetRoomCode;
             bots.push(bot);
             
             bot.on('connect', () => {
-                bot.emit('joinRoom', { code: TARGET_ROOM_CODE, name: `Bot_${i+1}` });
+                bot.emit('joinRoom', { code: targetRoomCode, name: `Bot_${Math.floor(Math.random()*1000)}` });
             });
 
             bot.on('joinedLobby', () => {
-                console.log(`[Bot ${i+1}] เข้าห้อง ${TARGET_ROOM_CODE} สำเร็จแล้ว และกำลังกด Ready`);
+                console.log(`[Bot] เข้าห้อง ${targetRoomCode} สำเร็จแล้ว และกำลังกด Ready`);
                 bot.emit('playerReady');
             });
 
             bot.on('errorMsg', (msg) => {
-                console.log(`[Bot ${i+1}] Error: ${msg}`);
+                console.log(`[Bot] Error: ${msg}`);
             });
 
             setupBotLogic(bot, i+1);
@@ -49,7 +50,26 @@ async function initBots() {
     }
 }
 
-initBots();
+if (require.main === module) {
+    spawnBots(TARGET_ROOM_CODE, NUM_BOTS, SERVER_URL);
+}
+
+module.exports = { spawnBots, removeBots };
+
+function removeBots(targetRoomCode, count) {
+    let removed = 0;
+    for (let i = bots.length - 1; i >= 0; i--) {
+        const bot = bots[i];
+        if (bot.roomCode === targetRoomCode) {
+            bot.disconnect();
+            bots.splice(i, 1);
+            removed++;
+            if (count !== 'all' && removed >= count) {
+                break;
+            }
+        }
+    }
+}
 
 function setupBotLogic(socket, index) {
     let x = 100;
@@ -154,8 +174,14 @@ function setupBotLogic(socket, index) {
     });
 
     socket.on('gameEnded', () => {
-        console.log(`[Bot ${index}] Game Ended!`);
+        console.log(`[Bot ${index}] Game Ended! กลับไปรอที่ Lobby และกด Ready...`);
         clearInterval(gameLoop);
+        
+        // จำลองเวลาอ่านกระดานคะแนน 3-5 วินาที แล้วกด Ready
+        setTimeout(() => {
+            socket.emit('playerReady');
+            console.log(`[Bot ${index}] กด Ready แล้ว!`);
+        }, 3000 + Math.random() * 2000);
     });
 
     socket.on('disconnect', () => {
