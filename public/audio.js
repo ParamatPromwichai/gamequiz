@@ -13,8 +13,8 @@ const AudioManager = {
   // Realistic Sound Effects from public open-source game assets (Phaser 3 examples repo)
   sfxFiles: {
     click: 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/audio/SoundEffects/key.wav',
-    attack: 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/audio/SoundEffects/sword.mp3',
-    hit: 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/audio/SoundEffects/squit.mp3',
+    attack: 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/audio/SoundEffects/squit.mp3',
+    hit: 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/audio/SoundEffects/sword.mp3',
     kill: 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/audio/SoundEffects/alien_death1.wav',
     boss_spawn: 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/audio/SoundEffects/explosion.mp3',
     correct: 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/audio/SoundEffects/p-ping.mp3',
@@ -23,6 +23,7 @@ const AudioManager = {
   },
   
   sfxAudio: {},
+  lastSfxTime: {},
 
   init() {
     this.bgmAudio.loop = true;
@@ -61,9 +62,17 @@ const AudioManager = {
 
   playSFX(effect) {
     if (this.muted) return;
+    
+    // Throttle spammy sounds
+    if (effect === 'attack' || effect === 'hit') {
+      const now = Date.now();
+      if (this.lastSfxTime[effect] && now - this.lastSfxTime[effect] < 100) return;
+      this.lastSfxTime[effect] = now;
+    }
+
     const sound = this.sfxAudio[effect];
     if (sound) {
-      // Clone the node so rapid repeated SFX (like clicking fast or multiple hits) don't cut each other off
+      // Clone the node so rapid repeated SFX don't cut each other off
       const clone = sound.cloneNode();
       clone.volume = sound.volume;
       clone.play().catch(e => console.log('SFX playback prevented:', e));

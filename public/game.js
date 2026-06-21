@@ -65,6 +65,7 @@ let gameState = {
 };
 
 let lastMoveEmitTime = 0;
+let lastAttackTime = 0;
 
 // ─── Input Handling ───
 const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
@@ -708,7 +709,10 @@ spectateBtn.addEventListener('click', () => {
 
 // ─── Game Logic ───
 function attemptAttack() {
-  if (typeof AudioManager !== 'undefined') AudioManager.playSFX('attack');
+  const now = Date.now();
+  if (now - lastAttackTime < 100) return; // 100ms cooldown (allow fast clicks)
+  lastAttackTime = now;
+
   const me = gameState.players[gameState.myId];
   if (!me || me.isDead) return;
   
@@ -730,6 +734,8 @@ function attemptAttack() {
   
   if (closest) {
     socket.emit('attackMonster', { monsterId: closest.id });
+  } else {
+    if (typeof AudioManager !== 'undefined') AudioManager.playSFX('attack');
   }
 }
 
@@ -1170,7 +1176,7 @@ function drawMinimap() {
 
 // ─── Effects ───
 function createSpawnEffect(x, y, color, isBoss = false) {
-  const count = isBoss ? 50 : 20;
+  const count = isBoss ? 20 : 8; // Reduced particles
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
     const speed = Math.random() * (isBoss ? 5 : 3);
@@ -1187,7 +1193,7 @@ function createSpawnEffect(x, y, color, isBoss = false) {
 }
 
 function createAttackEffect(x, y, dir) {
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 2; i++) { // Reduced from 5 to 2
     let vx = (Math.random() - 0.5) * 2;
     let vy = (Math.random() - 0.5) * 2;
     if (dir === 'up') vy = -Math.random() * 5;
@@ -1204,7 +1210,7 @@ function createAttackEffect(x, y, dir) {
 }
 
 function createDeathEffect(x, y, color) {
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 10; i++) { // Reduced from 30 to 10
     const angle = Math.random() * Math.PI * 2;
     const speed = Math.random() * 4 + 1;
     gameState.particles.push({

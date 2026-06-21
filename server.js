@@ -182,7 +182,7 @@ function startRoomGame(roomCode) {
 
   room.mapWidth = 2400 + (room.maxPlayers * 50);
   room.mapHeight = 1600 + (room.maxPlayers * 50);
-  room.maxMonsters = Math.max(8, Math.floor(room.maxPlayers * 1.5));
+  room.maxMonsters = Math.max(5, Math.floor(room.maxPlayers * 1.2)); // Reduced max monsters
   room.spawnInterval = Math.max(1000, 6000 - (room.maxPlayers * 100));
 
   Object.values(room.players).forEach(p => {
@@ -340,6 +340,7 @@ io.on('connection', (socket) => {
       hp: 100, maxHp: 100, isDead: false,
       score: 0, monstersKilled: 0, correctAnswers: 0,
       direction: 'down', isAttacking: false, pendingQuestion: null,
+      lastAttackTime: 0,
     };
 
     const currentCount = Object.keys(room.players).length;
@@ -380,6 +381,10 @@ io.on('connection', (socket) => {
     const player = room.players[socket.id];
     const monster = room.monsters[data.monsterId];
     if (!player || !monster || player.pendingQuestion || player.isDead) return;
+
+    const now = Date.now();
+    if (now - player.lastAttackTime < 100) return; // Server-side cooldown (100ms) to allow spamming
+    player.lastAttackTime = now;
 
     const dist = Math.sqrt(Math.pow(player.x - monster.x, 2) + Math.pow(player.y - monster.y, 2));
     if (dist > ATTACK_RANGE + monster.size) return;
