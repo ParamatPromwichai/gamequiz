@@ -3,7 +3,7 @@ const { io } = require("socket.io-client");
 const SERVER_URL = "http://localhost:3000"; 
 // const SERVER_URL = "https://gamekubol.onrender.com"; 
 const NUM_BOTS = 5;
-const TARGET_ROOM_CODE = "76PF"; // <--- เปลี่ยนเป็นเลขห้องที่คุณสร้างไว้ (ตัวพิมพ์ใหญ่)
+const TARGET_ROOM_CODE = "2F5S"; // <--- เปลี่ยนเป็นเลขห้องที่คุณสร้างไว้ (ตัวพิมพ์ใหญ่)
 
 const bots = [];
 let questionBank = {};

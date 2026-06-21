@@ -35,9 +35,9 @@ const AudioManager = {
       this.sfxAudio[key] = new Audio(url);
 
       // Adjust volumes for realism
-      if (key === 'attack') this.sfxAudio[key].volume = 0.5;
-      else if (key === 'hit') this.sfxAudio[key].volume = 0.4;
-      else if (key === 'kill') this.sfxAudio[key].volume = 0.6;
+      if (key === 'attack') this.sfxAudio[key].volume = 0.3;
+      else if (key === 'hit') this.sfxAudio[key].volume = 0.25;
+      else if (key === 'kill') this.sfxAudio[key].volume = 0.5;
       else if (key === 'boss_spawn') this.sfxAudio[key].volume = 0.8;
       else this.sfxAudio[key].volume = 0.4;
       
@@ -67,7 +67,7 @@ const AudioManager = {
     }
   },
 
-  playSFX(effect) {
+  playSFX(effect, volumeScale = 1.0) {
     if (this.muted) return;
 
     // Throttle spammy sounds and limit concurrent overlaps to 3
@@ -83,7 +83,7 @@ const AudioManager = {
     if (sound) {
       // Clone the node so rapid repeated SFX don't cut each other off
       const clone = sound.cloneNode();
-      clone.volume = sound.volume;
+      clone.volume = Math.max(0, Math.min(1, sound.volume * volumeScale));
       
       if (effect === 'attack' || effect === 'hit') {
         this.playingCount[effect]++;

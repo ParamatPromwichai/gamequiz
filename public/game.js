@@ -446,9 +446,10 @@ socket.on('playerLeft', (data) => {
 
 socket.on('playerMoved', (data) => {
   if (gameState.players[data.id]) {
-    gameState.players[data.id].x = data.x;
-    gameState.players[data.id].y = data.y;
-    gameState.players[data.id].direction = data.direction;
+    const p = gameState.players[data.id];
+    p.targetX = data.x;
+    p.targetY = data.y;
+    p.direction = data.direction;
   }
 });
 
@@ -515,9 +516,12 @@ socket.on('monsterDamaged', (data) => {
     m.currentHp = data.currentHp;
     createDamageText(m.x, m.y, data.damage);
     
-    // Play sound only if visible/close
-    if (typeof AudioManager !== 'undefined' && isVisible(m.x, m.y)) {
-      AudioManager.playSFX('hit');
+    // Play sound based on distance
+    if (typeof AudioManager !== 'undefined') {
+      const vol = calculateVolume(m.x, m.y);
+      if (vol > 0) {
+        AudioManager.playSFX('hit', vol);
+      }
     }
   }
 });
@@ -525,8 +529,11 @@ socket.on('monsterDamaged', (data) => {
 socket.on('monsterDefeated', (data) => {
   if (gameState.monsters[data.monsterId]) {
     const m = gameState.monsters[data.monsterId];
-    if (typeof AudioManager !== 'undefined' && isVisible(m.x, m.y)) {
-      AudioManager.playSFX('kill');
+    if (typeof AudioManager !== 'undefined') {
+      const vol = calculateVolume(m.x, m.y);
+      if (vol > 0) {
+        AudioManager.playSFX('kill', vol);
+      }
     }
     createDeathEffect(m.x, m.y, m.color);
     delete gameState.monsters[data.monsterId];
@@ -818,6 +825,18 @@ function updateLeaderboard() {
 }
 
 function updateMovement(dt) {
+  // Interpolate other players (Client-Side Interpolation for smooth movement)
+  for (const id in gameState.players) {
+    if (id === gameState.myId) continue;
+    const p = gameState.players[id];
+    
+    if (p.targetX !== undefined && p.targetY !== undefined) {
+      const lerpSpeed = 15; // Smoothly glide towards target
+      p.x += (p.targetX - p.x) * lerpSpeed * dt;
+      p.y += (p.targetY - p.y) * lerpSpeed * dt;
+    }
+  }
+
   const me = gameState.players[gameState.myId];
   if (!me || me.isDead) return;
   
@@ -1270,6 +1289,23 @@ function isVisible(x, y) {
   const w = gameState.camera.width;
   const h = gameState.camera.height;
   return (x >= cx - 100 && x <= cx + w + 100 && y >= cy - 100 && y <= cy + h + 100);
+}
+
+function calculateVolume(x, y) {
+  const me = gameState.players[gameState.myId];
+  if (!me) return 0;
+  
+  const dx = x - me.x;
+  const dy = y - me.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  
+  const maxVolumeRadius = 50;
+  const maxAudibleRadius = 1200; 
+  
+  if (dist <= maxVolumeRadius) return 1.0;
+  if (dist >= maxAudibleRadius) return 0.0;
+  
+  return 1.0 - ((dist - maxVolumeRadius) / (maxAudibleRadius - maxVolumeRadius));
 }
 
 function createSpawnEffect(x, y, color, isBoss = false) {
