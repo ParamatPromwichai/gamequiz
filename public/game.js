@@ -64,6 +64,17 @@ let gameState = {
   camera: { x: 0, y: 0, width: 0, height: 0 }
 };
 
+// ─── Off-screen Render Caches ───
+const attackCircleCanvas = document.createElement('canvas');
+attackCircleCanvas.width = 76;
+attackCircleCanvas.height = 76;
+const actx = attackCircleCanvas.getContext('2d');
+actx.strokeStyle = 'white';
+actx.lineWidth = 3;
+actx.beginPath();
+actx.arc(38, 38, 35, 0, Math.PI * 2);
+actx.stroke();
+
 let lastMoveEmitTime = 0;
 let lastAttackTime = 0;
 
@@ -499,17 +510,24 @@ socket.on('monsterDamaged', (data) => {
     return;
   }
   
-  if (typeof AudioManager !== 'undefined') AudioManager.playSFX('hit');
   if (gameState.monsters[data.monsterId]) {
-    gameState.monsters[data.monsterId].currentHp = data.currentHp;
-    createDamageText(gameState.monsters[data.monsterId].x, gameState.monsters[data.monsterId].y, data.damage);
+    const m = gameState.monsters[data.monsterId];
+    m.currentHp = data.currentHp;
+    createDamageText(m.x, m.y, data.damage);
+    
+    // Play sound only if visible/close
+    if (typeof AudioManager !== 'undefined' && isVisible(m.x, m.y)) {
+      AudioManager.playSFX('hit');
+    }
   }
 });
 
 socket.on('monsterDefeated', (data) => {
-  if (typeof AudioManager !== 'undefined') AudioManager.playSFX('kill');
   if (gameState.monsters[data.monsterId]) {
     const m = gameState.monsters[data.monsterId];
+    if (typeof AudioManager !== 'undefined' && isVisible(m.x, m.y)) {
+      AudioManager.playSFX('kill');
+    }
     createDeathEffect(m.x, m.y, m.color);
     delete gameState.monsters[data.monsterId];
   }
@@ -720,7 +738,7 @@ spectateBtn.addEventListener('click', () => {
 // ─── Game Logic ───
 function attemptAttack() {
   const now = Date.now();
-  if (now - lastAttackTime < 100) return; // 100ms cooldown (allow fast clicks)
+  if (now - lastAttackTime < 200) return; // 200ms cooldown (allow 5 hits per second)
   lastAttackTime = now;
 
   const me = gameState.players[gameState.myId];
@@ -865,8 +883,9 @@ function drawBattlefield() {
       ctx.fillStyle = isDark ? '#2e4c19' : '#35561d';
       ctx.fillRect(x - cx, y - cy, tileSize, tileSize);
       
-      const pseudo = Math.abs(Math.sin(x * 12.9898 + y * 78.233)) * 43758.5453;
-      if (pseudo % 1 > 0.8) {
+      // Fast pseudo-random instead of Math.sin
+      const seed = (x * 73856093 ^ y * 19349663);
+      if (Math.abs(seed % 100) > 80) {
         ctx.fillStyle = '#4a732a';
         ctx.fillRect(x - cx + 20, y - cy + 20, 6, 16);
         ctx.fillRect(x - cx + 32, y - cy + 28, 6, 12);
@@ -934,6 +953,44 @@ function drawBattlefield() {
     ctx.fillRect(cxCenter - cx + 150 - 10, cyCenter - cy - 10, 20, 20);
   }
 
+  // Left Hand Spawn Point
+  const leftX = cxCenter - 800;
+  const leftY = cyCenter;
+  if (leftX + 150 > cx && leftX - 150 < cx + w && leftY + 150 > cy && leftY - 150 < cy + h) {
+    ctx.beginPath();
+    ctx.arc(leftX - cx, leftY - cy, 100, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(76, 29, 149, 0.2)'; // #4c1d95
+    ctx.fill();
+    ctx.strokeStyle = '#4c1d95';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([10, 10]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#4c1d95';
+    ctx.font = 'bold 20px "Mali"';
+    ctx.textAlign = 'center';
+    ctx.fillText('จุดเกิดมือซ้าย', leftX - cx, leftY - cy + 130);
+  }
+
+  // Right Hand Spawn Point
+  const rightX = cxCenter + 800;
+  const rightY = cyCenter;
+  if (rightX + 150 > cx && rightX - 150 < cx + w && rightY + 150 > cy && rightY - 150 < cy + h) {
+    ctx.beginPath();
+    ctx.arc(rightX - cx, rightY - cy, 100, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(185, 28, 28, 0.2)'; // #b91c1c
+    ctx.fill();
+    ctx.strokeStyle = '#b91c1c';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([10, 10]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#b91c1c';
+    ctx.font = 'bold 20px "Mali"';
+    ctx.textAlign = 'center';
+    ctx.fillText('จุดเกิดมือขวา', rightX - cx, rightY - cy + 130);
+  }
+
   // 3. Map boundaries (dark forest/wall)
   ctx.strokeStyle = '#1a1412';
   ctx.lineWidth = 40;
@@ -998,13 +1055,9 @@ function drawPlayer(player) {
   ctx.textAlign = 'center';
   ctx.fillText(player.name, px, py - 32);
   
-  // Attacking effect
+  // Attacking effect (using pre-rendered canvas for performance)
   if (player.isAttacking && !player.isDead) {
-    ctx.strokeStyle = 'white';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(px, py, 35, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.drawImage(attackCircleCanvas, px - 38, py - 38);
   }
   
   // Draw HP bar
@@ -1169,13 +1222,28 @@ function drawMinimap() {
     gameState.camera.width * scaleX,
     gameState.camera.height * scaleY
   );
-  
+  // Spawn zones
+  minimapCtx.fillStyle = 'rgba(239, 68, 68, 0.3)'; // Center Boss
+  minimapCtx.beginPath();
+  minimapCtx.arc((gameState.mapWidth/2) * scaleX, (gameState.mapHeight/2) * scaleY, 150 * scaleX, 0, Math.PI * 2);
+  minimapCtx.fill();
+
+  minimapCtx.fillStyle = 'rgba(76, 29, 149, 0.3)'; // Left
+  minimapCtx.beginPath();
+  minimapCtx.arc((gameState.mapWidth/2 - 800) * scaleX, (gameState.mapHeight/2) * scaleY, 100 * scaleX, 0, Math.PI * 2);
+  minimapCtx.fill();
+
+  minimapCtx.fillStyle = 'rgba(185, 28, 28, 0.3)'; // Right
+  minimapCtx.beginPath();
+  minimapCtx.arc((gameState.mapWidth/2 + 800) * scaleX, (gameState.mapHeight/2) * scaleY, 100 * scaleX, 0, Math.PI * 2);
+  minimapCtx.fill();
+
   // Monsters
   for (const id in gameState.monsters) {
     const m = gameState.monsters[id];
-    minimapCtx.fillStyle = m.isLastBoss ? '#ef4444' : '#f59e0b';
+    minimapCtx.fillStyle = m.isLastBoss ? '#ef4444' : (m.difficulty === 'boss' ? m.color : '#f59e0b');
     minimapCtx.beginPath();
-    minimapCtx.arc(m.x * scaleX, m.y * scaleY, m.isLastBoss ? 4 : 2, 0, Math.PI * 2);
+    minimapCtx.arc(m.x * scaleX, m.y * scaleY, m.isLastBoss ? 4 : (m.difficulty === 'boss' ? 3 : 2), 0, Math.PI * 2);
     minimapCtx.fill();
   }
   
@@ -1196,7 +1264,16 @@ function drawMinimap() {
 }
 
 // ─── Effects ───
+function isVisible(x, y) {
+  const cx = gameState.camera.x;
+  const cy = gameState.camera.y;
+  const w = gameState.camera.width;
+  const h = gameState.camera.height;
+  return (x >= cx - 100 && x <= cx + w + 100 && y >= cy - 100 && y <= cy + h + 100);
+}
+
 function createSpawnEffect(x, y, color, isBoss = false) {
+  if (!isVisible(x, y)) return;
   const count = isBoss ? 20 : 8; // Reduced particles
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
@@ -1214,8 +1291,9 @@ function createSpawnEffect(x, y, color, isBoss = false) {
 }
 
 function createAttackEffect(x, y, dir) {
-  if (gameState.particles.length > 40) return; // ลิมิตจำนวนอนุภาคเพื่อรักษา FPS
-  for (let i = 0; i < 2; i++) { // Reduced from 5 to 2
+  if (!isVisible(x, y)) return;
+  if (gameState.particles.length > 20) return; // ลิมิตจำนวนอนุภาคเพื่อรักษา FPS
+  for (let i = 0; i < 1; i++) { // Reduced to 1 to reduce lag
     let vx = (Math.random() - 0.5) * 2;
     let vy = (Math.random() - 0.5) * 2;
     if (dir === 'up') vy = -Math.random() * 5;
@@ -1232,9 +1310,10 @@ function createAttackEffect(x, y, dir) {
 }
 
 function createDeathEffect(x, y, color) {
-  if (gameState.particles.length > 50) return; // ลิมิตจำนวนอนุภาค
+  if (!isVisible(x, y)) return;
+  if (gameState.particles.length > 30) return; // ลิมิตจำนวนอนุภาค
 
-  for (let i = 0; i < 10; i++) { // Reduced from 30 to 10
+  for (let i = 0; i < 8; i++) { // Reduced to 8 to reduce lag
     const angle = Math.random() * Math.PI * 2;
     const speed = Math.random() * 4 + 1;
     gameState.particles.push({
@@ -1250,7 +1329,8 @@ function createDeathEffect(x, y, color) {
 }
 
 function createDamageText(x, y, amount) {
-  if (gameState.floatingTexts.length > 15) return; // ลิมิตตัวเลขดาเมจเพื่อไม่ให้กระตุก
+  if (!isVisible(x, y)) return;
+  if (gameState.floatingTexts.length > 10) return; // ลิมิตตัวเลขดาเมจเพื่อไม่ให้กระตุก
 
   gameState.floatingTexts.push({
     x: x + (Math.random() - 0.5) * 20,

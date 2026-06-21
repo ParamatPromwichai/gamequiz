@@ -24,6 +24,7 @@ const AudioManager = {
 
   sfxAudio: {},
   lastSfxTime: {},
+  playingCount: {},
 
   init() {
     this.bgmAudio.loop = true;
@@ -39,6 +40,8 @@ const AudioManager = {
       else if (key === 'kill') this.sfxAudio[key].volume = 0.6;
       else if (key === 'boss_spawn') this.sfxAudio[key].volume = 0.8;
       else this.sfxAudio[key].volume = 0.4;
+      
+      this.playingCount[key] = 0;
     }
   },
 
@@ -67,11 +70,13 @@ const AudioManager = {
   playSFX(effect) {
     if (this.muted) return;
 
-    // Throttle spammy sounds
+    // Throttle spammy sounds and limit concurrent overlaps to 3
     if (effect === 'attack' || effect === 'hit') {
       const now = Date.now();
-      if (this.lastSfxTime[effect] && now - this.lastSfxTime[effect] < 100) return;
+      if (this.lastSfxTime[effect] && now - this.lastSfxTime[effect] < 50) return; // reduced throttle
       this.lastSfxTime[effect] = now;
+      
+      if (this.playingCount[effect] >= 3) return; // Limit to 3 overlapping sounds
     }
 
     const sound = this.sfxAudio[effect];
@@ -79,7 +84,17 @@ const AudioManager = {
       // Clone the node so rapid repeated SFX don't cut each other off
       const clone = sound.cloneNode();
       clone.volume = sound.volume;
-      clone.play().catch(e => console.log('SFX playback prevented:', e));
+      
+      if (effect === 'attack' || effect === 'hit') {
+        this.playingCount[effect]++;
+        clone.onended = () => { this.playingCount[effect]--; };
+        clone.onpause = () => { this.playingCount[effect]--; };
+      }
+      
+      clone.play().catch(e => {
+        if (effect === 'attack' || effect === 'hit') this.playingCount[effect]--;
+        console.log('SFX playback prevented:', e);
+      });
     }
   }
 };

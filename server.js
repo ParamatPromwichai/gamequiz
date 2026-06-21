@@ -175,7 +175,8 @@ function startRoomGame(roomCode) {
   room.gameActive = true;
   room.timeRemaining = room.duration || GAME_DURATION;
   room.lastBossSpawned = false;
-  room.minibossesSpawned = false;
+  room.leftHandSpawned = false;
+  room.rightHandSpawned = false;
   room.monsters = {};
   room.monsterIdCounter = 0;
   room.usedQuestionIndices.clear();
@@ -201,26 +202,9 @@ function startRoomGame(roomCode) {
   room.gameTimer = setInterval(() => {
     if (room.isPaused) return;
     room.timeRemaining--;
-    if (room.timeRemaining === 60 && !room.minibossesSpawned) {
-      room.minibossesSpawned = true;
+    if (room.timeRemaining === 90 && !room.leftHandSpawned) {
+      room.leftHandSpawned = true;
       const mbHp = 200 + (room.maxPlayers * 50);
-      
-      const rightHand = {
-        id: `miniboss_right_${Date.now()}`,
-        name: 'อัศวินทมิฬ (มือขวาจอมมาร)',
-        emoji: '⚔️',
-        hp: mbHp,
-        currentHp: mbHp,
-        color: '#b91c1c',
-        size: 55,
-        xp: 100,
-        difficulty: 'boss',
-        x: room.mapWidth/2 + 200,
-        y: room.mapHeight/2,
-        spawnTime: Date.now(),
-        attackedBy: {}
-      };
-      
       const leftHand = {
         id: `miniboss_left_${Date.now()}`,
         name: 'นักเวทย์ทมิฬ (มือซ้ายจอมมาร)',
@@ -231,18 +215,37 @@ function startRoomGame(roomCode) {
         size: 55,
         xp: 100,
         difficulty: 'boss',
-        x: room.mapWidth/2 - 200,
+        x: room.mapWidth/2 - 800,
         y: room.mapHeight/2,
         spawnTime: Date.now(),
         attackedBy: {}
       };
-
-      room.monsters[rightHand.id] = rightHand;
       room.monsters[leftHand.id] = leftHand;
-      
-      io.to(room.code).emit('monsterSpawned', rightHand);
       io.to(room.code).emit('monsterSpawned', leftHand);
-      io.to(room.code).emit('announcement', { text: '⚠️ มือขวาและมือซ้ายจอมมารปรากฏตัว! รีบกำจัดก่อนจอมมารจะมา!', type: 'boss' });
+      io.to(room.code).emit('announcement', { text: '🔮 นักเวทย์ทมิฬ (มือซ้ายจอมมาร) ปรากฏตัวทางฝั่งซ้ายของแผนที่!', type: 'boss' });
+    }
+
+    if (room.timeRemaining === 60 && !room.rightHandSpawned) {
+      room.rightHandSpawned = true;
+      const mbHp = 200 + (room.maxPlayers * 50);
+      const rightHand = {
+        id: `miniboss_right_${Date.now()}`,
+        name: 'อัศวินทมิฬ (มือขวาจอมมาร)',
+        emoji: '⚔️',
+        hp: mbHp,
+        currentHp: mbHp,
+        color: '#b91c1c',
+        size: 55,
+        xp: 100,
+        difficulty: 'boss',
+        x: room.mapWidth/2 + 800,
+        y: room.mapHeight/2,
+        spawnTime: Date.now(),
+        attackedBy: {}
+      };
+      room.monsters[rightHand.id] = rightHand;
+      io.to(room.code).emit('monsterSpawned', rightHand);
+      io.to(room.code).emit('announcement', { text: '⚔️ อัศวินทมิฬ (มือขวาจอมมาร) ปรากฏตัวทางฝั่งขวาของแผนที่!', type: 'boss' });
     }
     if (room.timeRemaining === LAST_BOSS_TIME && !room.lastBossSpawned) {
       room.lastBossSpawned = true;
@@ -387,7 +390,7 @@ io.on('connection', (socket) => {
     if (!player || !monster || player.pendingQuestion || player.isDead) return;
 
     const now = Date.now();
-    if (now - player.lastAttackTime < 100) return; // Server-side cooldown (100ms) to allow spamming
+    if (now - player.lastAttackTime < 200) return; // Server-side cooldown (200ms) for max 5 hits per second
     player.lastAttackTime = now;
 
     const dist = Math.sqrt(Math.pow(player.x - monster.x, 2) + Math.pow(player.y - monster.y, 2));
