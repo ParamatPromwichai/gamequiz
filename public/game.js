@@ -1214,6 +1214,7 @@ function createSpawnEffect(x, y, color, isBoss = false) {
 }
 
 function createAttackEffect(x, y, dir) {
+  if (gameState.particles.length > 40) return; // ลิมิตจำนวนอนุภาคเพื่อรักษา FPS
   for (let i = 0; i < 2; i++) { // Reduced from 5 to 2
     let vx = (Math.random() - 0.5) * 2;
     let vy = (Math.random() - 0.5) * 2;
@@ -1231,6 +1232,8 @@ function createAttackEffect(x, y, dir) {
 }
 
 function createDeathEffect(x, y, color) {
+  if (gameState.particles.length > 50) return; // ลิมิตจำนวนอนุภาค
+
   for (let i = 0; i < 10; i++) { // Reduced from 30 to 10
     const angle = Math.random() * Math.PI * 2;
     const speed = Math.random() * 4 + 1;
@@ -1247,6 +1250,8 @@ function createDeathEffect(x, y, color) {
 }
 
 function createDamageText(x, y, amount) {
+  if (gameState.floatingTexts.length > 15) return; // ลิมิตตัวเลขดาเมจเพื่อไม่ให้กระตุก
+
   gameState.floatingTexts.push({
     x: x + (Math.random() - 0.5) * 20,
     y: y - 20,
@@ -1349,17 +1354,19 @@ function gameLoop(timestamp) {
     ctx.beginPath();
     ctx.arc(p.x - gameState.camera.x, p.y - gameState.camera.y, p.size, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 1;
   });
+  ctx.globalAlpha = 1;
 
-  gameState.floatingTexts.forEach(t => {
-    ctx.globalAlpha = t.life / t.maxLife;
-    ctx.fillStyle = t.color;
+  if (gameState.floatingTexts.length > 0) {
     ctx.font = 'bold 20px "Outfit"';
     ctx.textAlign = 'center';
-    ctx.fillText(t.text, t.x - gameState.camera.x, t.y - gameState.camera.y);
+    gameState.floatingTexts.forEach(t => {
+      ctx.globalAlpha = t.life / t.maxLife;
+      ctx.fillStyle = t.color;
+      ctx.fillText(t.text, t.x - gameState.camera.x, t.y - gameState.camera.y);
+    });
     ctx.globalAlpha = 1;
-  });
+  }
   
   drawMinimap();
   
