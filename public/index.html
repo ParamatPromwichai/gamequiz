@@ -9,6 +9,12 @@
 </head>
 <body>
   <button id="muteBtn" class="mute-btn" title="เปิด/ปิดเสียง" onclick="toggleGlobalMute()">🔊</button>
+  
+  <div id="metricsOverlay" style="position: fixed; top: 0; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 4px 16px; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; color: white; font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: bold; z-index: 9999; display: flex; gap: 20px; pointer-events: none; border: 1px solid #5d4037; border-top: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+    <div id="pingDisplay" style="color: #10b981;">Ping: -- ms</div>
+    <div id="fpsDisplay" style="color: #10b981;">FPS: --</div>
+  </div>
+
   <div id="loginScreen" class="screen active">
     <div class="login-bg"></div>
     <div class="login-container">

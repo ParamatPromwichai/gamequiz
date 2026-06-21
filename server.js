@@ -212,7 +212,7 @@ function startRoomGame(roomCode) {
         hp: mbHp,
         currentHp: mbHp,
         color: '#b91c1c',
-        size: 80,
+        size: 55,
         xp: 100,
         difficulty: 'boss',
         x: room.mapWidth/2 + 200,
@@ -228,7 +228,7 @@ function startRoomGame(roomCode) {
         hp: mbHp,
         currentHp: mbHp,
         color: '#4c1d95',
-        size: 80,
+        size: 55,
         xp: 100,
         difficulty: 'boss',
         x: room.mapWidth/2 - 200,
@@ -291,6 +291,10 @@ function getPublicPlayers(room) {
 // ─── Socket.io ───
 io.on('connection', (socket) => {
   let currentRoom = null;
+
+  socket.on('pingTest', (callback) => {
+    if (typeof callback === 'function') callback();
+  });
 
   socket.on('createRoom', (data) => {
     const code = generateRoomCode();

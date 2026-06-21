@@ -474,6 +474,8 @@ socket.on('lastBossSpawned', (boss) => {
 });
 
 socket.on('playerAttack', (data) => {
+  if (data.playerId === gameState.myId) return; // Ignore own attacks (already predicted locally)
+  
   if (gameState.players[data.playerId]) {
     gameState.players[data.playerId].isAttacking = true;
     setTimeout(() => {
@@ -489,6 +491,14 @@ socket.on('playerAttack', (data) => {
 });
 
 socket.on('monsterDamaged', (data) => {
+  if (data.attackerId === gameState.myId) {
+    // Only update HP sync from server, ignore visuals since we already predicted them
+    if (gameState.monsters[data.monsterId]) {
+      gameState.monsters[data.monsterId].currentHp = data.currentHp;
+    }
+    return;
+  }
+  
   if (typeof AudioManager !== 'undefined') AudioManager.playSFX('hit');
   if (gameState.monsters[data.monsterId]) {
     gameState.monsters[data.monsterId].currentHp = data.currentHp;
@@ -734,6 +744,17 @@ function attemptAttack() {
   
   if (closest) {
     socket.emit('attackMonster', { monsterId: closest.id });
+    
+    // --- Client-Side Prediction (Instant feedback) ---
+    if (typeof AudioManager !== 'undefined') AudioManager.playSFX('hit');
+    createDamageText(closest.x, closest.y, 10);
+    closest.currentHp = Math.max(0, closest.currentHp - 10);
+    
+    me.isAttacking = true;
+    setTimeout(() => { if (gameState.players[gameState.myId]) gameState.players[gameState.myId].isAttacking = false; }, 200);
+    createAttackEffect(me.x, me.y, me.direction);
+    // -------------------------------------------------
+    
   } else {
     if (typeof AudioManager !== 'undefined') AudioManager.playSFX('attack');
   }
@@ -1235,6 +1256,43 @@ function createDamageText(x, y, amount) {
     maxLife: 40
   });
 }
+
+let currentFps = 60;
+let currentPing = 0;
+let fpsFrameCount = 0;
+let lastFpsTime = 0;
+
+setInterval(() => {
+  if (typeof socket !== 'undefined' && socket.connected) {
+    const start = Date.now();
+    socket.emit('pingTest', () => {
+      currentPing = Date.now() - start;
+      const pingEl = document.getElementById('pingDisplay');
+      if (pingEl) {
+        pingEl.textContent = `Ping: ${currentPing} ms`;
+        pingEl.style.color = currentPing > 150 ? '#ef4444' : (currentPing > 80 ? '#f59e0b' : '#10b981');
+      }
+    });
+  }
+}, 2000);
+
+function fpsLoop(timestamp) {
+  if (!lastFpsTime) lastFpsTime = timestamp;
+  fpsFrameCount++;
+  if (timestamp - lastFpsTime >= 1000) {
+    currentFps = Math.round((fpsFrameCount * 1000) / (timestamp - lastFpsTime));
+    fpsFrameCount = 0;
+    lastFpsTime = timestamp;
+    
+    const fpsEl = document.getElementById('fpsDisplay');
+    if (fpsEl) {
+      fpsEl.textContent = `FPS: ${currentFps}`;
+      fpsEl.style.color = currentFps < 30 ? '#ef4444' : (currentFps < 50 ? '#f59e0b' : '#10b981');
+    }
+  }
+  requestAnimationFrame(fpsLoop);
+}
+requestAnimationFrame(fpsLoop);
 
 let lastFrameTime = 0;
 

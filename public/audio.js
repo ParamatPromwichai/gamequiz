@@ -5,7 +5,7 @@ const AudioManager = {
 
   // High-quality royalty-free background music tracks
   bgmTracks: {
-    lobby: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3', // Relaxed & Ambient
+    lobby: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-17.mp3', // Relaxed & Ambient
     battle: '/battle.mp3', // Battlefield music (Loaded locally to bypass block)
     boss: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-16.mp3'    // Intense & Epic
   },
